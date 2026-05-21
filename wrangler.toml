@@ -1,0 +1,14 @@
+name = "stockvault"
+compatibility_date = "2026-05-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stockvault-db"
+database_id = "placeholder-will-be-filled"
+
+[vars]
+ALPHA_VANTAGE_BASE = "https://www.alphavantage.co/query"
+
+# ALPHA_VANTAGE_KEY must be set as an encrypted secret:
+#   npx wrangler pages secret put ALPHA_VANTAGE_KEY
