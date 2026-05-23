@@ -103,5 +103,8 @@ async function init() {
   console.log('[StockVault] 应用已启动 ✨');
 }
 
-// 启动
-document.addEventListener('DOMContentLoaded', init);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
