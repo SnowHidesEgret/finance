@@ -120,6 +120,6 @@ export const summaryStore = createStore({
 export const settingsStore = createStore({
   colorScheme: 'cn',      // 'cn' | 'intl'
   theme: 'dark',
-  refreshInterval: 300000,
+  refreshInterval: 60000, // 1 分钟
   sidebarCollapsed: false
 });

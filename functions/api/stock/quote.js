@@ -7,7 +7,7 @@
  */
 
 /** Cache TTL in seconds */
-const CACHE_TTL_SECONDS = 300;
+const CACHE_TTL_SECONDS = 60;
 
 /**
  * Parse the messy Alpha Vantage key names into clean camelCase.

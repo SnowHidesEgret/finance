@@ -129,6 +129,6 @@ export const COLOR_SCHEMES = {
 export const DEFAULT_SETTINGS = {
   colorScheme: COLOR_SCHEMES.CN,
   theme: 'dark',
-  refreshInterval: 300000, // 5 分钟
+  refreshInterval: 60000, // 1 分钟
   language: 'zh-CN'
 };

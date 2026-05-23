@@ -100,6 +100,21 @@ async function init() {
   // 5. 启动路由
   initRouter();
   
+  // 6. 自动刷新逻辑
+  let refreshTimer = setInterval(() => {
+    window.dispatchEvent(new CustomEvent('stockvault:refresh'));
+  }, settingsStore.get('refreshInterval'));
+
+  // 监听设置中的刷新时间变化
+  settingsStore.on('refreshInterval', (newVal) => {
+    clearInterval(refreshTimer);
+    if (newVal > 0) {
+      refreshTimer = setInterval(() => {
+        window.dispatchEvent(new CustomEvent('stockvault:refresh'));
+      }, newVal);
+    }
+  });
+  
   console.log('[StockVault] 应用已启动 ✨');
 }
 
