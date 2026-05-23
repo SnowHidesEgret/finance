@@ -14,18 +14,24 @@ const CACHE_TTL_SECONDS = 300;
  * @param {object} raw – the "Global Quote" object from Alpha Vantage
  * @returns {object}   – normalised quote
  */
-function normaliseQuote(raw) {
+function normaliseQuote(meta) {
+  const price = meta.regularMarketPrice || 0;
+  const prevClose = meta.chartPreviousClose || 0;
+  const changeAmount = price - prevClose;
+  const changePercent = prevClose ? (changeAmount / prevClose) * 100 : 0;
+
   return {
-    symbol: raw['01. symbol'] ?? '',
-    price: parseFloat(raw['05. price']) || 0,
-    changeAmount: parseFloat(raw['09. change']) || 0,
-    changePercent: parseFloat((raw['10. change percent'] ?? '').replace('%', '')) || 0,
-    high: parseFloat(raw['03. high']) || 0,
-    low: parseFloat(raw['04. low']) || 0,
-    volume: parseInt(raw['06. volume'], 10) || 0,
-    prevClose: parseFloat(raw['08. previous close']) || 0,
-    open: parseFloat(raw['02. open']) || 0,
-    latestTradingDay: raw['07. latest trading day'] ?? '',
+    symbol: meta.symbol ?? '',
+    price: price,
+    changeAmount: changeAmount,
+    changePercent: changePercent,
+    high: meta.regularMarketDayHigh || 0,
+    low: meta.regularMarketDayLow || 0,
+    volume: meta.regularMarketVolume || 0,
+    prevClose: prevClose,
+    open: prevClose,
+    latestTradingDay: meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString().split('T')[0] : '',
+    currency: meta.currency ?? ''
   };
 }
 
@@ -82,44 +88,35 @@ export async function onRequestGet(context) {
     );
   }
 
-  // ── 2. Fetch from Alpha Vantage ─────────────────────────────────────
-  const apiKey = env.ALPHA_VANTAGE_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { success: false, error: 'Alpha Vantage API key is not configured' },
-      { status: 503 },
-    );
-  }
+  // ── 2. Fetch from Yahoo Finance ─────────────────────────────────────
+  const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&useYfid=true&range=1d`;
+  
+  try {
+    const yfResponse = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      }
+    });
 
-  const apiUrl = `${env.ALPHA_VANTAGE_BASE}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
-  const avResponse = await fetch(apiUrl);
+    if (!yfResponse.ok) {
+      return Response.json(
+        { success: false, error: `Yahoo Finance returned HTTP ${yfResponse.status}` },
+        { status: 502 },
+      );
+    }
 
-  if (!avResponse.ok) {
-    return Response.json(
-      { success: false, error: `Alpha Vantage returned HTTP ${avResponse.status}` },
-      { status: 502 },
-    );
-  }
+    const yfData = await yfResponse.json();
+    const result = yfData.chart?.result?.[0];
+    
+    if (!result || !result.meta) {
+      return Response.json(
+        { success: false, error: `No quote data found for symbol: ${symbol}` },
+        { status: 404 },
+      );
+    }
 
-  const avData = await avResponse.json();
-
-  // Alpha Vantage may return a rate-limit note instead of data
-  if (avData['Note'] || avData['Information']) {
-    return Response.json(
-      { success: false, error: avData['Note'] || avData['Information'] },
-      { status: 429 },
-    );
-  }
-
-  const raw = avData['Global Quote'];
-  if (!raw || Object.keys(raw).length === 0) {
-    return Response.json(
-      { success: false, error: `No quote data found for symbol: ${symbol}` },
-      { status: 404 },
-    );
-  }
-
-  const quote = normaliseQuote(raw);
+    const quote = normaliseQuote(result.meta);
 
   // ── 3. Upsert cache ────────────────────────────────────────────────
   await db
@@ -161,4 +158,10 @@ export async function onRequestGet(context) {
       },
     },
   );
+  } catch (error) {
+    return Response.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
 }
