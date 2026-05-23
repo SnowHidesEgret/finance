@@ -88,8 +88,20 @@ export async function onRequestGet(context) {
     );
   }
 
+  // Translate legacy Alpha Vantage symbols to Yahoo Finance symbols
+  function translateSymbol(sym) {
+    let s = sym.toUpperCase();
+    if (s.endsWith('.HKG')) return s.replace('.HKG', '.HK');
+    if (s.endsWith('.SHH')) return s.replace('.SHH', '.SS');
+    if (s.endsWith('.SHZ')) return s.replace('.SHZ', '.SZ');
+    if (s.endsWith('.SWX')) return s.replace('.SWX', '.SW');
+    return s;
+  }
+
+  const yfSymbol = translateSymbol(symbol);
+
   // ── 2. Fetch from Yahoo Finance ─────────────────────────────────────
-  const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&useYfid=true&range=1d`;
+  const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&useYfid=true&range=1d`;
   
   try {
     const yfResponse = await fetch(apiUrl, {
@@ -135,7 +147,7 @@ export async function onRequestGet(context) {
          updated_at     = datetime('now')`,
     )
     .bind(
-      quote.symbol || symbol,
+      symbol, // Use original symbol for cache key
       quote.price,
       quote.changeAmount,
       quote.changePercent,
@@ -143,14 +155,14 @@ export async function onRequestGet(context) {
       quote.low,
       quote.volume,
       quote.prevClose,
-      null, // currency — Alpha Vantage GLOBAL_QUOTE doesn't include it
+      null, // currency
     )
     .run();
 
   return Response.json(
     {
       success: true,
-      data: { ...quote, cached: false },
+      data: { ...quote, symbol: symbol, cached: false },
     },
     {
       headers: {
