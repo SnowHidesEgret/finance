@@ -2,12 +2,13 @@
  * @fileoverview GET /api/summary
  *
  * Returns a global portfolio summary across all markets.
- * - Fetches live exchange rates (CNY base) from Frankfurter
- * - Translates legacy AV symbol suffixes to Yahoo Finance format for quote lookup
- * - Computes current values and PnL in CNY using live rates
+ * - Fetches live exchange rates from Frankfurter
+ * - Directly fetches live prices from Yahoo Finance for all open positions
+ * - Stores fetched prices into quote_cache for reuse by other endpoints
+ * - Computes PnL in CNY using live rates
  */
 
-/** Translate legacy Alpha Vantage symbol suffixes to Yahoo Finance format */
+/** Translate legacy Alpha Vantage symbol suffixes → Yahoo Finance format */
 function toYahooSymbol(sym) {
   const s = (sym || '').toUpperCase();
   if (s.endsWith('.HKG')) return s.replace('.HKG', '.HK');
@@ -34,6 +35,33 @@ function round2(n) {
 }
 
 /**
+ * Fetch a single quote from Yahoo Finance chart API.
+ * Returns { price, prevClose, currency } or null on failure.
+ */
+async function fetchYahooQuote(yfSymbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=1d`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || !meta.regularMarketPrice) return null;
+    return {
+      price:      meta.regularMarketPrice,
+      prevClose:  meta.chartPreviousClose || meta.regularMarketPrice,
+      currency:   meta.currency || '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * GET handler — global portfolio summary.
  * @param {EventContext} context
  */
@@ -41,79 +69,85 @@ export async function onRequestGet(context) {
   const { env } = context;
 
   // ── 1. Fetch live exchange rates (CNY base) ─────────────────────────
-  // rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }  (how many foreign per 1 CNY)
+  // rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }  (1 CNY = X foreign)
   let rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 };
   try {
     const rateRes = await fetch('https://api.frankfurter.dev/v1/latest?base=CNY&symbols=USD,HKD,CHF');
     if (rateRes.ok) {
       const rateData = await rateRes.json();
-      rates = { ...rates, ...rateData.rates };
+      if (rateData.rates) rates = { ...rates, ...rateData.rates };
     }
   } catch (e) {
     console.warn('[summary] Exchange rate fetch failed, using fallback:', e.message);
   }
 
-  // 1 USD → CNY = 1 / rates.USD, etc.
+  // Helper: convert any amount in `currency` to CNY
   function toCNY(amount, currency) {
-    if (currency === 'CNY' || !currency) return amount;
+    if (!currency || currency === 'CNY') return amount;
     const r = rates[currency];
     return r ? amount / r : amount;
   }
 
-  // ── 2. Load positions with quote cache (using Yahoo-format join) ─────
-  // We need to join on both the original symbol AND the translated symbol
-  const { results } = await env.DB.prepare(
-    `SELECT
-       p.*,
-       COALESCE(
-         (SELECT price FROM quote_cache WHERE UPPER(symbol) = UPPER(p.symbol) LIMIT 1),
-         (SELECT price FROM quote_cache WHERE UPPER(symbol) = UPPER(
-           CASE
-             WHEN UPPER(p.symbol) LIKE '%.HKG' THEN REPLACE(UPPER(p.symbol), '.HKG', '.HK')
-             WHEN UPPER(p.symbol) LIKE '%.SHH' THEN REPLACE(UPPER(p.symbol), '.SHH', '.SS')
-             WHEN UPPER(p.symbol) LIKE '%.SHZ' THEN REPLACE(UPPER(p.symbol), '.SHZ', '.SZ')
-             WHEN UPPER(p.symbol) LIKE '%.SWX' THEN REPLACE(UPPER(p.symbol), '.SWX', '.SW')
-             ELSE UPPER(p.symbol)
-           END
-         ) LIMIT 1)
-       ) AS quote_price,
-       COALESCE(
-         (SELECT updated_at FROM quote_cache WHERE UPPER(symbol) = UPPER(p.symbol) LIMIT 1),
-         (SELECT updated_at FROM quote_cache WHERE UPPER(symbol) = UPPER(
-           CASE
-             WHEN UPPER(p.symbol) LIKE '%.HKG' THEN REPLACE(UPPER(p.symbol), '.HKG', '.HK')
-             WHEN UPPER(p.symbol) LIKE '%.SHH' THEN REPLACE(UPPER(p.symbol), '.SHH', '.SS')
-             WHEN UPPER(p.symbol) LIKE '%.SHZ' THEN REPLACE(UPPER(p.symbol), '.SHZ', '.SZ')
-             WHEN UPPER(p.symbol) LIKE '%.SWX' THEN REPLACE(UPPER(p.symbol), '.SWX', '.SW')
-             ELSE UPPER(p.symbol)
-           END
-         ) LIMIT 1)
-       ) AS quote_updated_at
-     FROM positions p
-     WHERE p.status = 'OPEN'
-     ORDER BY p.market, p.open_date DESC`,
+  // ── 2. Load all open positions from DB ──────────────────────────────
+  const { results: positions } = await env.DB.prepare(
+    `SELECT * FROM positions WHERE status = 'OPEN' ORDER BY market, open_date DESC`,
   ).all();
 
-  const positions = results ?? [];
-
-  if (positions.length === 0) {
+  if (!positions || positions.length === 0) {
     return Response.json({
       success: true,
       data: {
-        totalValueCNY: 0,
-        totalCostCNY: 0,
-        totalPnlCNY: 0,
-        totalPnlPercent: 0,
-        positionCount: 0,
-        marketCounts: {},
-        markets: {},
-        positions: [],
-        exchangeRates: rates,
+        totalValueCNY: 0, totalCostCNY: 0, totalPnlCNY: 0,
+        totalPnlPercent: 0, positionCount: 0,
+        marketCounts: {}, markets: {}, marketSummaries: {},
+        positions: [], exchangeRates: rates,
       },
     });
   }
 
-  // ── 3. Compute summary ──────────────────────────────────────────────
+  // ── 3. Fetch live quotes for all symbols in parallel ─────────────────
+  // Deduplicate symbols
+  const uniqueSymbols = [...new Set(positions.map(p => p.symbol))];
+  const quoteResults = await Promise.all(
+    uniqueSymbols.map(async (sym) => {
+      const yfSym = toYahooSymbol(sym);
+      const quote = await fetchYahooQuote(yfSym);
+      return { sym, yfSym, quote };
+    })
+  );
+
+  // Build quote map: original_symbol → quote data
+  const quoteMap = new Map();
+  for (const { sym, yfSym, quote } of quoteResults) {
+    if (quote) {
+      quoteMap.set(sym.toUpperCase(), quote);
+      // Also save to quote_cache for other endpoints (fire and forget)
+      try {
+        await env.DB.prepare(
+          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, currency, updated_at)
+           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, datetime('now'))
+           ON CONFLICT(symbol) DO UPDATE SET
+             price = excluded.price,
+             change_amount = excluded.change_amount,
+             change_percent = excluded.change_percent,
+             prev_close = excluded.prev_close,
+             currency = excluded.currency,
+             updated_at = datetime('now')`,
+        ).bind(
+          sym.toUpperCase(),
+          quote.price,
+          round2(quote.price - quote.prevClose),
+          quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
+          quote.prevClose,
+          quote.currency,
+        ).run();
+      } catch (e) {
+        console.warn('[summary] Failed to update quote_cache for', sym, e.message);
+      }
+    }
+  }
+
+  // ── 4. Compute portfolio summary ────────────────────────────────────
   let totalValueCNY = 0;
   let totalCostCNY  = 0;
   let totalDayPnL   = 0;
@@ -122,53 +156,55 @@ export async function onRequestGet(context) {
   const positionDetails = [];
 
   for (const p of positions) {
-    // Determine currency from market if not stored
     const currency = p.currency || marketCurrency(p.market);
-
-    // Use live quote price if available, else fall back to open price
-    const currentPrice = p.quote_price ?? p.open_price;
-
-    // Live rate: 1 unit of currency → CNY
     const rateToCNY = currency === 'CNY' ? 1 : (rates[currency] ? 1 / rates[currency] : 1);
 
-    // Cost in original currency (open_price stored in the position's own currency)
-    const costOriginal  = p.open_price * p.quantity + (p.commission ?? 0);
-    const costCNY       = round2(costOriginal * rateToCNY);
+    const liveQuote   = quoteMap.get(p.symbol?.toUpperCase());
+    const currentPrice = liveQuote?.price ?? p.open_price;
+    const prevClose    = liveQuote?.prevClose ?? p.open_price;
+    const hasLivePrice = !!liveQuote;
 
-    // Market value in CNY using live price and live exchange rate
-    const valueOriginal = currentPrice * p.quantity;
-    const valueCNY      = round2(valueOriginal * rateToCNY);
+    // Cost in original currency (open_price is in the position's own currency)
+    const costOriginal   = p.open_price * p.quantity + (p.commission ?? 0);
+    const costCNY        = round2(costOriginal * rateToCNY);
 
-    const pnlCNY        = round2(valueCNY - costCNY);
-    const pnlPercent    = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
+    // Market value in CNY using live price + live exchange rate
+    const valueOriginal  = currentPrice * p.quantity;
+    const valueCNY       = round2(valueOriginal * rateToCNY);
 
-    // Approximate day PnL (requires prev_close from quote_cache - not in join yet, skip)
-    const dayPnl = 0;
+    const pnlCNY         = round2(valueCNY - costCNY);
+    const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
+
+    // Day PnL
+    const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
 
     totalValueCNY += valueCNY;
     totalCostCNY  += costCNY;
-    totalDayPnL   += dayPnl;
+    totalDayPnL   += dayChangeCNY;
 
     const mkt = p.market;
     if (!marketBreakdown[mkt]) {
-      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0 };
+      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0 };
     }
-    marketBreakdown[mkt].value += valueCNY;
-    marketBreakdown[mkt].cost  += costCNY;
-    marketBreakdown[mkt].count += 1;
-    marketBreakdown[mkt].pnl   += pnlCNY;
+    marketBreakdown[mkt].value  += valueCNY;
+    marketBreakdown[mkt].cost   += costCNY;
+    marketBreakdown[mkt].count  += 1;
+    marketBreakdown[mkt].pnl    += pnlCNY;
+    marketBreakdown[mkt].dayPnl += dayChangeCNY;
 
     positionDetails.push({
       ...p,
       currency,
       currentPrice,
+      prevClose,
       rateToCNY,
       costCNY,
       marketValueCNY: valueCNY,
       pnlCNY,
       pnlPercent,
-      quoteUpdatedAt: p.quote_updated_at,
-      hasLivePrice: p.quote_price != null,
+      dayPnLCNY: dayChangeCNY,
+      hasLivePrice,
+      weight: 0, // calculated below
     });
   }
 
@@ -180,6 +216,7 @@ export async function onRequestGet(context) {
   const totalPnlCNY     = round2(totalValueCNY - totalCostCNY);
   const totalPnlPercent = totalCostCNY !== 0 ? round2((totalPnlCNY / totalCostCNY) * 100) : 0;
 
+  // Build per-market stats
   const markets = {};
   for (const [mkt, data] of Object.entries(marketBreakdown)) {
     markets[mkt] = {
@@ -191,6 +228,7 @@ export async function onRequestGet(context) {
       totalPnlCNY:   round2(data.pnl),
       pnlPercent:    data.cost !== 0 ? round2((data.pnl / data.cost) * 100) : 0,
       positionCount: data.count,
+      dayPnL:        round2(data.dayPnl),
     };
   }
 
@@ -198,23 +236,19 @@ export async function onRequestGet(context) {
     {
       success: true,
       data: {
-        totalValueCNY: round2(totalValueCNY),
-        totalCostCNY:  round2(totalCostCNY),
+        totalValueCNY:  round2(totalValueCNY),
+        totalCostCNY:   round2(totalCostCNY),
         totalPnlCNY,
         totalPnlPercent,
-        dayPnl: round2(totalDayPnL),
-        positionCount: positionDetails.length,
-        marketCounts: Object.fromEntries(
-          Object.entries(marketBreakdown).map(([m, d]) => [m, d.count]),
-        ),
+        dayPnl:         round2(totalDayPnL),
+        positionCount:  positionDetails.length,
+        marketCounts:   Object.fromEntries(Object.entries(marketBreakdown).map(([m, d]) => [m, d.count])),
         markets,
         marketSummaries: markets,
-        positions: positionDetails,
-        exchangeRates: rates,
+        positions:       positionDetails,
+        exchangeRates:   rates,
       },
     },
-    {
-      headers: { 'Cache-Control': 'no-store' },
-    },
+    { headers: { 'Cache-Control': 'no-store' } },
   );
 }
