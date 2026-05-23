@@ -48,10 +48,16 @@ export async function onRequestGet(context) {
   const stmt = env.DB.prepare(sql);
   const { results } = await (binds.length ? stmt.bind(...binds) : stmt).all();
 
+  const MARKET_CURRENCY = { A_SHARE: 'CNY', HK: 'HKD', US: 'USD', SWISS: 'CHF' };
+  const rows = (results ?? []).map(r => ({
+    ...r,
+    currency: r.currency || MARKET_CURRENCY[r.market] || 'CNY',
+  }));
+
   return Response.json({
     success: true,
-    data: results ?? [],
-    count: (results ?? []).length,
+    data: rows,
+    count: rows.length,
   });
 }
 
