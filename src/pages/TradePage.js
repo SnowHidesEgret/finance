@@ -5,6 +5,7 @@ import { MARKETS, MARKET_IDS, SECTORS } from '../utils/constants.js';
 import { post } from '../services/api.js';
 import { searchStock } from '../services/stockApi.js';
 import { navigate } from '../router/index.js';
+import { getExchangeRates } from '../services/exchangeRate.js';
 
 /**
  * Alpha Vantage region → 内部 market ID 映射
@@ -321,10 +322,24 @@ export async function renderTradePage(container) {
     btn.textContent = '保存中...';
     
     try {
+      const marketId = document.getElementById('f-market').value;
+      const currency = MARKETS[marketId]?.currency || 'CNY';
+
+      // Fetch live exchange rate at time of trade entry
+      let open_rate_to_cny = 1;
+      if (currency !== 'CNY') {
+        try {
+          const rates = await getExchangeRates();
+          open_rate_to_cny = rates[currency] ? 1 / rates[currency] : 1;
+        } catch (_) {}
+      }
+
       const data = {
         symbol: document.getElementById('f-symbol').value,
         name: document.getElementById('f-name').value,
-        market: document.getElementById('f-market').value,
+        market: marketId,
+        currency,
+        open_rate_to_cny,
         sector: document.getElementById('f-sector').value,
         open_price: parseFloat(document.getElementById('f-price').value),
         quantity: parseFloat(document.getElementById('f-quantity').value),
