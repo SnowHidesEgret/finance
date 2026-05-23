@@ -298,7 +298,7 @@ function renderMarketCard(marketId, data, totalValue = 0) {
 }
 
 /**
- * 更新持仓表格
+ * 更新持仓表格（仪表盘版：现价/成本用本币，市值/盈亏用人民币汇总）
  */
 function updatePositionTable(positions, rates) {
   const tbody = document.getElementById('positions-tbody');
@@ -318,15 +318,23 @@ function updatePositionTable(positions, rates) {
     `;
     return;
   }
-  
+
+  const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+  function fmtNative(amount, currency) {
+    const sym = CURRENCY_SYMBOL[currency] || '';
+    return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
   tbody.innerHTML = positions.map(pos => {
     const market = MARKETS[pos.market] || {};
+    const currency = pos.currency || market.currency || 'CNY';
     const pnl = pos.pnlCNY || pos.pnl_cny || 0;
     const pnlPct = pos.pnlPercent || pos.pnl_percent || 0;
     const weight = pos.weight || 0;
     const beta = pos.beta != null ? pos.beta.toFixed(2) : '--';
-    const marketValue = pos.marketValueCNY || pos.valueCNY || 0;
+    const marketValueCNY = pos.marketValueCNY || pos.valueCNY || 0;
     const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
+    const hasLive = pos.hasLivePrice;
     
     return `
       <tr class="table__row table__row--hoverable">
@@ -340,9 +348,11 @@ function updatePositionTable(positions, rates) {
           <span class="tag tag--${pos.market?.toLowerCase()}">${market.flag || ''} ${market.label || pos.market}</span>
         </td>
         <td class="table__td table__td--right">${formatQuantity(pos.quantity)}</td>
-        <td class="table__td table__td--right table__td--mono">${formatNumber(currentPrice)}</td>
-        <td class="table__td table__td--right table__td--mono">${formatNumber(pos.open_price)}</td>
-        <td class="table__td table__td--right table__td--mono">${formatCurrency(marketValue)}</td>
+        <td class="table__td table__td--right table__td--mono" title="${hasLive ? '实时价格' : '使用开仓价'}">
+          ${fmtNative(currentPrice, currency)}${hasLive ? '' : ' <small style="color:var(--color-text-muted)">*</small>'}
+        </td>
+        <td class="table__td table__td--right table__td--mono">${fmtNative(pos.open_price, currency)}</td>
+        <td class="table__td table__td--right table__td--mono">${formatCurrency(marketValueCNY)}</td>
         <td class="table__td table__td--right table__td--${getPnLClass(pnl)}">
           ${formatCurrency(pnl, 'CNY', true)}
         </td>
@@ -355,6 +365,7 @@ function updatePositionTable(positions, rates) {
     `;
   }).join('');
 }
+
 
 /**
  * 更新图表
