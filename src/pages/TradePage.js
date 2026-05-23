@@ -14,6 +14,10 @@ const REGION_TO_MARKET = {
   'hong kong':      'HK',
   'frankfurt':      'US',     // fallback
   'london':         'US',     // fallback
+  'nasdaq':         'US',
+  'nyse':           'US',
+  'otc':            'US',
+  'otc markets':    'US',
   // 中国大陆交易所
   'shanghai':       'A_SHARE',
   'shenzhen':       'A_SHARE',
