@@ -5,7 +5,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "stockvault-db"
-database_id = "placeholder-will-be-filled"
+database_id = "4eb37949-d3e8-442b-bbb1-80ce8bef9f0d"
 
 [vars]
 ALPHA_VANTAGE_BASE = "https://www.alphavantage.co/query"
