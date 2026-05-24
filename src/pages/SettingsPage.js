@@ -80,6 +80,10 @@ export async function renderSettingsPage(container) {
             <label class="form-label" style="font-size:0.875rem; color:var(--color-text-secondary)">新密码</label>
             <input type="password" id="new-password" class="form-control" placeholder="输入新密码" required>
           </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.875rem; color:var(--color-text-secondary)">确认新密码</label>
+            <input type="password" id="confirm-password" class="form-control" placeholder="再次输入新密码" required>
+          </div>
           <div id="pwd-msg" style="font-size:0.875rem; margin-bottom:16px; display:none;"></div>
           <button type="submit" class="btn btn--primary" id="pwd-btn">修改密码</button>
           <button type="button" class="btn btn--danger" id="logout-btn" style="margin-left: 12px; background: transparent; border: 1px solid var(--color-loss); color: var(--color-loss);">退出登录</button>
@@ -105,8 +109,16 @@ export async function renderSettingsPage(container) {
       e.preventDefault();
       const oldPwd = document.getElementById('old-password').value;
       const newPwd = document.getElementById('new-password').value;
+      const confirmPwd = document.getElementById('confirm-password').value;
       const msgEl = document.getElementById('pwd-msg');
       const btn = document.getElementById('pwd-btn');
+      
+      if (newPwd !== confirmPwd) {
+        msgEl.style.color = 'var(--color-profit)';
+        msgEl.textContent = '两次输入的新密码不一致，请重新检查';
+        msgEl.style.display = 'block';
+        return;
+      }
       
       try {
         btn.disabled = true;
