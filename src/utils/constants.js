@@ -7,7 +7,7 @@ export const MARKETS = {
   A_SHARE: {
     id: 'A_SHARE',
     label: 'A 股',
-    flag: '🇨🇳',
+    flag: '<img src="https://flagcdn.com/w20/cn.png" alt="CN" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'CNY',
     color: 'var(--color-market-cn)',
     exchanges: [
@@ -18,7 +18,7 @@ export const MARKETS = {
   HK: {
     id: 'HK',
     label: '港股',
-    flag: '🇭🇰',
+    flag: '<img src="https://flagcdn.com/w20/hk.png" alt="HK" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'HKD',
     color: 'var(--color-market-hk)',
     exchanges: [{ suffix: '.HKG', name: '香港联交所' }]
@@ -26,7 +26,7 @@ export const MARKETS = {
   US: {
     id: 'US',
     label: '美股',
-    flag: '🇺🇸',
+    flag: '<img src="https://flagcdn.com/w20/us.png" alt="US" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'USD',
     color: 'var(--color-market-us)',
     exchanges: [{ suffix: '', name: 'NYSE / NASDAQ' }]
@@ -34,7 +34,7 @@ export const MARKETS = {
   SWISS: {
     id: 'SWISS',
     label: '瑞士',
-    flag: '🇨🇭',
+    flag: '<img src="https://flagcdn.com/w20/ch.png" alt="CH" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'CHF',
     color: 'var(--color-market-ch)',
     exchanges: [{ suffix: '.SWX', name: 'SIX 瑞士交易所' }]
