@@ -5,6 +5,16 @@
  * DELETE /api/positions/:id   — delete a position
  */
 
+/**
+ * Generate a URL-safe unique ID (nano-id style, no dependencies).
+ * @returns {string} 21-char random ID
+ */
+function generateId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(21));
+  return Array.from(bytes, (b) => chars[b % chars.length]).join('');
+}
+
 // ────────────────────────────────────────────────────────────
 // GET /api/positions/:id
 // ────────────────────────────────────────────────────────────
@@ -116,7 +126,10 @@ export async function onRequestPut(context) {
       );
     }
 
-    await env.DB.prepare(
+    const tradeId = generateId();
+    const now = new Date().toISOString();
+
+    const updatePosStmt = env.DB.prepare(
       `UPDATE positions
        SET status = 'CLOSED',
            close_date         = ?1,
@@ -124,16 +137,37 @@ export async function onRequestPut(context) {
            close_rate_to_cny  = ?3,
            close_commission   = ?4,
            updated_at         = datetime('now')
-       WHERE id = ?5`,
-    )
-      .bind(
-        body.close_date,
-        Number(body.close_price),
-        Number(body.close_rate_to_cny ?? 1),
-        Number(body.close_commission ?? 0),
-        id,
-      )
-      .run();
+       WHERE id = ?5`
+    ).bind(
+      body.close_date,
+      Number(body.close_price),
+      Number(body.close_rate_to_cny ?? 1),
+      Number(body.close_commission ?? 0),
+      id,
+    );
+
+    const insertTradeStmt = env.DB.prepare(
+      `INSERT INTO trades
+         (id, position_id, symbol, name, market, trade_type, price, quantity,
+          commission, currency, rate_to_cny, trade_date, notes, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'SELL', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
+    ).bind(
+      tradeId,
+      id,
+      existing.symbol,
+      existing.name,
+      existing.market,
+      Number(body.close_price),
+      existing.quantity,
+      Number(body.close_commission ?? 0),
+      existing.currency,
+      Number(body.close_rate_to_cny ?? 1),
+      body.close_date,
+      'Closed position',
+      now,
+    );
+
+    await env.DB.batch([updatePosStmt, insertTradeStmt]);
 
     const updated = await env.DB.prepare('SELECT * FROM positions WHERE id = ?1')
       .bind(id)

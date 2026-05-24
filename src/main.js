@@ -20,6 +20,7 @@ const pageModules = {
   dashboard: () => import('./pages/DashboardPage.js'),
   positions: () => import('./pages/PositionsPage.js'),
   trade: () => import('./pages/TradePage.js'),
+  trades: () => import('./pages/TradesPage.js'),
   charts: () => import('./pages/ChartsPage.js'),
   market: () => import('./pages/MarketPage.js'),
   importExport: () => import('./pages/ImportExportPage.js'),
@@ -70,6 +71,11 @@ async function init() {
   route('/trade', async (container) => {
     const { renderTradePage } = await pageModules.trade();
     renderTradePage(container);
+  });
+
+  route('/trades', async (container) => {
+    const { renderTradesPage } = await pageModules.trades();
+    renderTradesPage(container);
   });
   
   route('/charts', async (container) => {

@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { route: ROUTES.TRADE, icon: 'trade', label: '交易录入', emoji: '📝' },
   { route: ROUTES.MARKET, icon: 'market', label: '市场专区', emoji: '🌍' },
   { route: ROUTES.CHARTS, icon: 'charts', label: '图表分析', emoji: '📈' },
+  { route: ROUTES.TRADES, icon: 'trades', label: '交易记录', emoji: '🧾' },
   { route: ROUTES.IMPORT_EXPORT, icon: 'import', label: '导入导出', emoji: '📥' },
   { route: ROUTES.SETTINGS, icon: 'settings', label: '设置', emoji: '⚙️' }
 ];

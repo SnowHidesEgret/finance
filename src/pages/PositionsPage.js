@@ -6,7 +6,7 @@
 
 import { formatPercent, formatQuantity, getPnLClass } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
-import { get, del } from '../services/api.js';
+import { get, put, del } from '../services/api.js';
 
 /** 货币 → 符号 */
 const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
@@ -71,6 +71,83 @@ function showDeleteModal(pos, onConfirm) {
     btn.disabled = true;
     btn.textContent = '删除中...';
     await onConfirm();
+    overlay.remove();
+  });
+}
+
+// ── 平仓确认弹窗 ─────────────────────────────────────────────────────────────
+
+function showCloseModal(pos, currentPrice, currency, onConfirm) {
+  document.getElementById('close-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'close-modal';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;z-index:9999;
+    animation:fadeIn 0.15s ease;
+  `;
+  
+  const today = new Date().toISOString().split('T')[0];
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-surface,#1e1e2e);border:1px solid var(--color-border,#374151);
+      border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);
+    ">
+      <div style="font-size:2rem;text-align:center;margin-bottom:16px;">🛑</div>
+      <h3 style="margin:0 0 8px;text-align:center;font-size:1.1rem;">平仓确认</h3>
+      <p style="margin:0 0 24px;text-align:center;color:var(--color-text-secondary,#9ca3af);font-size:0.9rem;">
+        卖出 <strong style="color:var(--color-text-primary)">${pos.name}</strong>（${pos.symbol}）
+      </p>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display:block;margin-bottom:8px;font-size:0.85rem;color:var(--color-text-secondary);">平仓日期</label>
+        <input type="date" id="close-date" class="input" value="${today}" style="width:100%;">
+      </div>
+      
+      <div style="margin-bottom: 16px;">
+        <label style="display:block;margin-bottom:8px;font-size:0.85rem;color:var(--color-text-secondary);">平仓价格 (${currency})</label>
+        <input type="number" id="close-price" class="input" value="${currentPrice || ''}" step="0.001" min="0" style="width:100%;">
+      </div>
+      
+      <div style="margin-bottom: 24px;">
+        <label style="display:block;margin-bottom:8px;font-size:0.85rem;color:var(--color-text-secondary);">平仓手续费 (${currency})</label>
+        <input type="number" id="close-commission" class="input" value="0" step="0.01" min="0" style="width:100%;">
+      </div>
+
+      <div style="display:flex;gap:12px;justify-content:center;">
+        <button id="close-cancel" class="btn btn--ghost" style="min-width:100px;">取消</button>
+        <button id="close-confirm" class="btn btn--primary" style="min-width:100px;">确认平仓</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-cancel').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  
+  overlay.querySelector('#close-confirm').addEventListener('click', async () => {
+    const dateInput = overlay.querySelector('#close-date').value;
+    const priceInput = overlay.querySelector('#close-price').value;
+    const commissionInput = overlay.querySelector('#close-commission').value;
+
+    if (!dateInput || !priceInput) {
+      alert('请输入平仓日期和平仓价格');
+      return;
+    }
+
+    const btn = overlay.querySelector('#close-confirm');
+    btn.disabled = true;
+    btn.textContent = '处理中...';
+    
+    await onConfirm({
+      close_date: dateInput,
+      close_price: parseFloat(priceInput),
+      close_commission: parseFloat(commissionInput) || 0
+    });
+    
     overlay.remove();
   });
 }
@@ -255,17 +332,29 @@ async function loadPositions() {
             </span>
           </td>
           <td class="table__td table__td--right">
-            <button class="btn btn--sm btn--ghost btn-delete-pos"
-              data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}"
-              style="color:#ef4444;border-color:rgba(239,68,68,0.3);"
-              title="删除持仓">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6l-1 14H6L5 6"></path>
-                <path d="M10 11v6M14 11v6"></path>
-                <path d="M9 6V4h6v2"></path>
-              </svg>
-            </button>
+            <div style="display:flex;gap:8px;justify-content:flex-end;">
+              ${!isClosed ? `
+              <button class="btn btn--sm btn--ghost btn-close-pos"
+                data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}" data-price="${currentPrice}" data-currency="${currency}"
+                title="平仓">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+              </button>` : ''}
+              <button class="btn btn--sm btn--ghost btn-delete-pos"
+                data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}"
+                style="color:#ef4444;border-color:rgba(239,68,68,0.3);"
+                title="删除持仓">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6l-1 14H6L5 6"></path>
+                  <path d="M10 11v6M14 11v6"></path>
+                  <path d="M9 6V4h6v2"></path>
+                </svg>
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -281,6 +370,24 @@ async function loadPositions() {
             await loadPositions(); // 刷新列表
           } catch (err) {
             alert(`删除失败: ${err.message}`);
+          }
+        });
+      });
+    });
+
+    // 绑定平仓按钮事件
+    tbody.querySelectorAll('.btn-close-pos').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { id, name, symbol, price, currency } = btn.dataset;
+        showCloseModal({ id, name, symbol }, price, currency, async (closeData) => {
+          try {
+            await put(`/api/positions/${id}`, {
+              status: 'CLOSED',
+              ...closeData
+            });
+            await loadPositions(); // 刷新列表
+          } catch (err) {
+            alert(`平仓失败: ${err.message}`);
           }
         });
       });

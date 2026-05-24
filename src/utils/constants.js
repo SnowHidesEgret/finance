@@ -115,6 +115,7 @@ export const ROUTES = {
   TRADE: '/trade',
   CHARTS: '/charts',
   MARKET: '/market',
+  TRADES: '/trades',
   IMPORT_EXPORT: '/import-export',
   SETTINGS: '/settings'
 };

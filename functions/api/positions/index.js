@@ -120,33 +120,55 @@ export async function onRequestPost(context) {
   }
 
   const id = generateId();
+  const tradeId = generateId();
   const now = new Date().toISOString();
 
-  await env.DB.prepare(
+  const posStmt = env.DB.prepare(
     `INSERT INTO positions
        (id, symbol, name, market, currency, open_date, open_price, open_rate_to_cny,
         quantity, commission, status, sector, beta, notes, tags, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'OPEN', ?11, ?12, ?13, ?14, ?15, ?16)`,
-  )
-    .bind(
-      id,
-      String(body.symbol).toUpperCase(),
-      body.name,
-      market,
-      body.currency ?? 'CNY',
-      body.open_date,
-      Number(body.open_price),
-      Number(body.open_rate_to_cny ?? 1),
-      Number(body.quantity),
-      Number(body.commission ?? 0),
-      body.sector ?? null,
-      body.beta != null ? Number(body.beta) : null,
-      body.notes ?? null,
-      body.tags ?? null,
-      now,
-      now,
-    )
-    .run();
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'OPEN', ?11, ?12, ?13, ?14, ?15, ?16)`
+  ).bind(
+    id,
+    String(body.symbol).toUpperCase(),
+    body.name,
+    market,
+    body.currency ?? 'CNY',
+    body.open_date,
+    Number(body.open_price),
+    Number(body.open_rate_to_cny ?? 1),
+    Number(body.quantity),
+    Number(body.commission ?? 0),
+    body.sector ?? null,
+    body.beta != null ? Number(body.beta) : null,
+    body.notes ?? null,
+    body.tags ?? null,
+    now,
+    now,
+  );
+
+  const tradeStmt = env.DB.prepare(
+    `INSERT INTO trades
+       (id, position_id, symbol, name, market, trade_type, price, quantity,
+        commission, currency, rate_to_cny, trade_date, notes, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, 'BUY', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
+  ).bind(
+    tradeId,
+    id,
+    String(body.symbol).toUpperCase(),
+    body.name,
+    market,
+    Number(body.open_price),
+    Number(body.quantity),
+    Number(body.commission ?? 0),
+    body.currency ?? 'CNY',
+    Number(body.open_rate_to_cny ?? 1),
+    body.open_date,
+    body.notes ?? null,
+    now,
+  );
+
+  await env.DB.batch([posStmt, tradeStmt]);
 
   // Return the newly created position
   const created = await env.DB.prepare('SELECT * FROM positions WHERE id = ?1')
