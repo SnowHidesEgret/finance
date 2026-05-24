@@ -13,10 +13,12 @@ const BASE_URL = '';  // Same origin — Pages Functions 在同域下
  */
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
+  const token = localStorage.getItem('auth_token');
   
   const config = {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
       ...options.headers
     },
     ...options
@@ -24,6 +26,13 @@ async function request(endpoint, options = {}) {
   
   try {
     const response = await fetch(url, config);
+    
+    if (response.status === 401) {
+      localStorage.removeItem('auth_token');
+      window.location.hash = '#/login';
+      throw new ApiError('未授权，请登录', 401, null);
+    }
+    
     const data = await response.json();
     
     if (!response.ok) {

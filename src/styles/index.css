@@ -180,6 +180,19 @@ html, body {
   margin: 0 auto;
 }
 
+/* Login Layout overrides */
+body.login-layout .app-layout__sidebar,
+body.login-layout .app-layout__header,
+body.login-layout .app-layout__footer {
+  display: none !important;
+}
+body.login-layout .app-layout__content {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;

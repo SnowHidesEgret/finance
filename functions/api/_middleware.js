@@ -79,5 +79,38 @@ async function corsHandler({ request, next }) {
   return next();
 }
 
-// Middleware chain — CORS runs first, then error/timing wrapper.
-export const onRequest = [corsHandler, errorHandler];
+/**
+ * Verify Authorization token
+ * @param {EventContext} context
+ */
+async function authHandler({ request, env, next }) {
+  const url = new URL(request.url);
+  // Bypass auth for login endpoint and OPTIONS
+  if (url.pathname === '/api/auth/login' || request.method === 'OPTIONS') {
+    return next();
+  }
+  
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  
+  if (!token) {
+    return jsonResponse({ success: false, error: '未授权，请登录' }, 401);
+  }
+  
+  try {
+    const db = env.DB;
+    const stmt = await db.prepare("SELECT value FROM user_settings WHERE key = 'auth_token'").first();
+    
+    if (!stmt || stmt.value !== token) {
+      return jsonResponse({ success: false, error: '登录已失效，请重新登录' }, 401);
+    }
+  } catch (err) {
+    console.error('[auth]', err);
+    return jsonResponse({ success: false, error: '数据库验证错误' }, 500);
+  }
+  
+  return next();
+}
+
+// Middleware chain — CORS runs first, then error/timing wrapper, then auth.
+export const onRequest = [corsHandler, errorHandler, authHandler];

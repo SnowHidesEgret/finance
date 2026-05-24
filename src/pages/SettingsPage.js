@@ -1,6 +1,7 @@
 /**
  * StockVault — 设置页
  */
+import { put } from '../services/api.js';
 import { getColorScheme, setColorScheme } from '../utils/colorScheme.js';
 import { getAppTheme, setAppTheme } from '../utils/appTheme.js';
 import { COLOR_SCHEMES } from '../utils/constants.js';
@@ -67,12 +68,29 @@ export async function renderSettingsPage(container) {
         </div>
 
       </div>
+
+      <div class="card" style="max-width: 600px; margin-top: 24px;">
+        <h3 style="margin-bottom:24px; font-size:1.1rem; border-bottom:1px solid var(--color-border); padding-bottom:12px;">安全设置</h3>
+        <form id="password-form">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.875rem; color:var(--color-text-secondary)">原密码</label>
+            <input type="password" id="old-password" class="form-control" placeholder="输入当前密码" required>
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.875rem; color:var(--color-text-secondary)">新密码</label>
+            <input type="password" id="new-password" class="form-control" placeholder="输入新密码" required>
+          </div>
+          <div id="pwd-msg" style="font-size:0.875rem; margin-bottom:16px; display:none;"></div>
+          <button type="submit" class="btn btn--primary" id="pwd-btn">修改密码</button>
+          <button type="button" class="btn btn--danger" id="logout-btn" style="margin-left: 12px; background: transparent; border: 1px solid var(--color-loss); color: var(--color-loss);">退出登录</button>
+        </form>
+      </div>
+
     </div>
   `;
   
   window.handleSchemeChange = (scheme) => {
     setColorScheme(scheme);
-    // Reload page to re-render selected border and apply scheme fully to charts
     renderSettingsPage(container);
   };
 
@@ -80,4 +98,46 @@ export async function renderSettingsPage(container) {
     setAppTheme(theme);
     renderSettingsPage(container);
   };
+
+  const pwdForm = document.getElementById('password-form');
+  if (pwdForm) {
+    pwdForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const oldPwd = document.getElementById('old-password').value;
+      const newPwd = document.getElementById('new-password').value;
+      const msgEl = document.getElementById('pwd-msg');
+      const btn = document.getElementById('pwd-btn');
+      
+      try {
+        btn.disabled = true;
+        btn.textContent = '提交中...';
+        msgEl.style.display = 'none';
+        
+        await put('/api/auth/password', { oldPassword: oldPwd, newPassword: newPwd });
+        msgEl.style.color = 'var(--color-loss)';
+        msgEl.textContent = '修改成功！即将跳转重新登录...';
+        msgEl.style.display = 'block';
+        
+        setTimeout(() => {
+          localStorage.removeItem('auth_token');
+          window.location.hash = '#/login';
+        }, 1500);
+      } catch (err) {
+        msgEl.style.color = 'var(--color-profit)';
+        msgEl.textContent = err.message || '修改失败';
+        msgEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '修改密码';
+      }
+    });
+  }
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+      localStorage.removeItem('auth_token');
+      window.location.hash = '#/login';
+    });
+  }
 }

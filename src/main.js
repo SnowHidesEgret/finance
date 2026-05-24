@@ -8,7 +8,7 @@ import './styles/dashboard.css';
 import './styles/charts.css';
 import './styles/animations.css';
 
-import { route, initRouter, navigate } from './router/index.js';
+import { route, initRouter, navigate, beforeEach } from './router/index.js';
 import { initColorScheme } from './utils/colorScheme.js';
 import { initAppTheme } from './utils/appTheme.js';
 import { settingsStore } from './store/index.js';
@@ -25,7 +25,8 @@ const pageModules = {
   charts: () => import('./pages/ChartsPage.js'),
   market: () => import('./pages/MarketPage.js'),
   importExport: () => import('./pages/ImportExportPage.js'),
-  settings: () => import('./pages/SettingsPage.js')
+  settings: () => import('./pages/SettingsPage.js'),
+  login: () => import('./pages/LoginPage.js')
 };
 
 /**
@@ -105,10 +106,34 @@ async function init() {
     renderSettingsPage(container);
   });
   
-  // 5. 启动路由
+  route('/login', async (container) => {
+    const { renderLoginPage } = await pageModules.login();
+    renderLoginPage(container);
+  });
+  
+  // 5. 路由拦截与布局切换
+  beforeEach((from, to) => {
+    const token = localStorage.getItem('auth_token');
+    if (!token && to !== '/login') {
+      navigate('/login');
+      return false;
+    }
+    if (token && to === '/login') {
+      navigate('/');
+      return false;
+    }
+    
+    if (to === '/login') {
+      document.body.classList.add('login-layout');
+    } else {
+      document.body.classList.remove('login-layout');
+    }
+  });
+
+  // 6. 启动路由
   initRouter();
   
-  // 6. 自动刷新逻辑
+  // 7. 自动刷新逻辑
   let refreshTimer = setInterval(() => {
     window.dispatchEvent(new CustomEvent('stockvault:refresh'));
   }, settingsStore.get('refreshInterval'));
