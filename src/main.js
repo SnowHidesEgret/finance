@@ -10,6 +10,7 @@ import './styles/animations.css';
 
 import { route, initRouter, navigate } from './router/index.js';
 import { initColorScheme } from './utils/colorScheme.js';
+import { initAppTheme } from './utils/appTheme.js';
 import { settingsStore } from './store/index.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar } from './components/Sidebar.js';
@@ -33,6 +34,7 @@ const pageModules = {
 async function init() {
   // 1. 应用配色方案
   initColorScheme();
+  initAppTheme();
   
   // 2. 渲染应用骨架
   const app = document.getElementById('app');

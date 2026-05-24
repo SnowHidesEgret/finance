@@ -2,10 +2,12 @@
  * StockVault — 设置页
  */
 import { getColorScheme, setColorScheme } from '../utils/colorScheme.js';
+import { getAppTheme, setAppTheme } from '../utils/appTheme.js';
 import { COLOR_SCHEMES } from '../utils/constants.js';
 
 export async function renderSettingsPage(container) {
   const currentScheme = getColorScheme();
+  const currentTheme = getAppTheme();
   
   container.innerHTML = `
     <div class="page-container animate-fade-in-up">
@@ -42,6 +44,28 @@ export async function renderSettingsPage(container) {
             </label>
           </div>
         </div>
+
+        <div class="form-group" style="margin-bottom:24px;">
+          <label class="form-label" style="font-size:1rem; font-weight:600; color:var(--color-text-primary)">背景主题</label>
+          <p style="font-size:0.875rem; color:var(--color-text-secondary); margin-bottom:12px;">选择深色或浅色背景界面。</p>
+          
+          <div style="display:flex; gap:16px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid ${currentTheme === 'dark' ? 'var(--color-accent)' : 'transparent'}">
+              <input type="radio" name="app_theme" value="dark" ${currentTheme === 'dark' ? 'checked' : ''} onchange="window.handleThemeChange('dark')">
+              <div>
+                <div style="font-weight:500;">深色主题 (Dark)</div>
+              </div>
+            </label>
+            
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid ${currentTheme === 'light' ? 'var(--color-accent)' : 'transparent'}">
+              <input type="radio" name="app_theme" value="light" ${currentTheme === 'light' ? 'checked' : ''} onchange="window.handleThemeChange('light')">
+              <div>
+                <div style="font-weight:500;">浅色主题 (Light)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
       </div>
     </div>
   `;
@@ -49,6 +73,11 @@ export async function renderSettingsPage(container) {
   window.handleSchemeChange = (scheme) => {
     setColorScheme(scheme);
     // Reload page to re-render selected border and apply scheme fully to charts
+    renderSettingsPage(container);
+  };
+
+  window.handleThemeChange = (theme) => {
+    setAppTheme(theme);
     renderSettingsPage(container);
   };
 }
