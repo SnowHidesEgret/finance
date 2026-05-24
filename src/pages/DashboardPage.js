@@ -9,11 +9,18 @@ import { get } from '../services/api.js';
 import { getExchangeRates } from '../services/exchangeRate.js';
 import { summaryStore, positionsStore, marketStore } from '../store/index.js';
 
+let currentSortField = 'weight';
+let currentSortOrder = 'desc';
+let cachedPositions = [];
+
 /**
  * 渲染仪表盘页面
  * @param {HTMLElement} container
  */
 export async function renderDashboardPage(container) {
+  currentSortField = 'weight';
+  currentSortOrder = 'desc';
+
   container.innerHTML = `
     <div class="dashboard animate-fade-in-up">
       <!-- KPI 指标卡 -->
@@ -117,9 +124,9 @@ export async function renderDashboardPage(container) {
                 <th class="table__th table__th--right">现价</th>
                 <th class="table__th table__th--right">成本</th>
                 <th class="table__th table__th--right">市值(¥)</th>
-                <th class="table__th table__th--right">盈亏(¥)</th>
+                <th class="table__th table__th--right dashboard-sortable" data-sort="pnl" style="cursor:pointer; user-select:none;" title="点击按盈亏排序">盈亏(¥) <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right">盈亏%</th>
-                <th class="table__th table__th--right">占比</th>
+                <th class="table__th table__th--right dashboard-sortable" data-sort="weight" style="cursor:pointer; user-select:none;" title="点击按占比排序">占比 <span class="sort-icon">↓</span></th>
                 <th class="table__th table__th--right">Beta</th>
               </tr>
             </thead>
@@ -134,6 +141,28 @@ export async function renderDashboardPage(container) {
   
   // 加载数据
   await loadDashboardData(container);
+  
+  // 绑定排序事件
+  container.querySelectorAll('.dashboard-sortable').forEach(th => {
+    th.addEventListener('click', (e) => {
+      const field = e.currentTarget.dataset.sort;
+      if (currentSortField === field) {
+        currentSortOrder = currentSortOrder === 'desc' ? 'asc' : 'desc';
+      } else {
+        currentSortField = field;
+        currentSortOrder = 'desc'; // 默认从大到小
+      }
+      
+      // 更新图标
+      container.querySelectorAll('.dashboard-sortable .sort-icon').forEach(icon => icon.textContent = '');
+      const icon = e.currentTarget.querySelector('.sort-icon');
+      if (icon) {
+        icon.textContent = currentSortOrder === 'desc' ? '↓' : '↑';
+      }
+      
+      updatePositionTable(cachedPositions);
+    });
+  });
   
   // 监听刷新事件
   const refreshHandler = () => loadDashboardData(container);
@@ -304,7 +333,11 @@ function updatePositionTable(positions, rates) {
   const tbody = document.getElementById('positions-tbody');
   if (!tbody) return;
   
-  if (!positions || positions.length === 0) {
+  if (positions) {
+    cachedPositions = positions;
+  }
+  
+  if (!cachedPositions || cachedPositions.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="11" class="table__empty">
@@ -325,7 +358,23 @@ function updatePositionTable(positions, rates) {
     return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
-  tbody.innerHTML = positions.map(pos => {
+  // 排序
+  const sortedPositions = [...cachedPositions].sort((a, b) => {
+    let valA = 0;
+    let valB = 0;
+    
+    if (currentSortField === 'weight') {
+      valA = a.weight || 0;
+      valB = b.weight || 0;
+    } else if (currentSortField === 'pnl') {
+      valA = a.pnlCNY || a.pnl_cny || 0;
+      valB = b.pnlCNY || b.pnl_cny || 0;
+    }
+    
+    return currentSortOrder === 'desc' ? valB - valA : valA - valB;
+  });
+
+  tbody.innerHTML = sortedPositions.map(pos => {
     const market = MARKETS[pos.market] || {};
     const currency = pos.currency || market.currency || 'CNY';
     const pnl = pos.pnlCNY || pos.pnl_cny || 0;
