@@ -51,7 +51,7 @@ export async function onRequestGet(context) {
   const MARKET_CURRENCY = { A_SHARE: 'CNY', HK: 'HKD', US: 'USD', SWISS: 'CHF' };
   const rows = (results ?? []).map(r => ({
     ...r,
-    currency: r.currency || MARKET_CURRENCY[r.market] || 'CNY',
+    currency: MARKET_CURRENCY[r.market] || 'CNY',
   }));
 
   return Response.json({

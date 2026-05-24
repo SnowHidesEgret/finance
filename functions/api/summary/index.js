@@ -156,7 +156,8 @@ export async function onRequestGet(context) {
   const positionDetails = [];
 
   for (const p of positions) {
-    const currency = p.currency || marketCurrency(p.market);
+    // Always derive currency from market — DB currency field may be wrong on old records
+    const currency = marketCurrency(p.market);
     const rateToCNY = currency === 'CNY' ? 1 : (rates[currency] ? 1 / rates[currency] : 1);
 
     const liveQuote   = quoteMap.get(p.symbol?.toUpperCase());
