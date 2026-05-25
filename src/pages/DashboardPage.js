@@ -580,11 +580,11 @@ function showDayPnLModal(positions) {
   const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
   function fmtNative(amount, currency) {
     const sym = CURRENCY_SYMBOL[currency] || '';
-    return \`\${sym}\${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\`;
+    return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   const rowsHtml = sorted.length === 0 
-    ? \`<tr><td colspan="5" class="table__empty">暂无持仓</td></tr>\`
+    ? `<tr><td colspan="5" class="table__empty">暂无持仓</td></tr>`
     : sorted.map(pos => {
         const market = MARKETS[pos.market] || {};
         const currency = pos.currency || market.currency || 'CNY';
@@ -593,32 +593,32 @@ function showDayPnLModal(positions) {
 
         const isOpen = isMarketOpen(pos.market);
         const statusIndicator = isOpen 
-          ? \`<span style="color:#10b981; font-size:0.875rem;" title="开盘中">🟢</span>\` 
-          : \`<span style="color:#64748b; font-size:0.875rem;" title="休市">⚪</span>\`;
+          ? `<span style="color:#10b981; font-size:0.875rem;" title="开盘中">🟢</span>` 
+          : `<span style="color:#64748b; font-size:0.875rem;" title="休市">⚪</span>`;
 
-        return \`
+        return `
           <tr class="table__row table__row--hoverable">
             <td class="table__td">
-              <div style="font-weight:600">\${pos.name}</div>
-              <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">\${pos.symbol}</div>
+              <div style="font-weight:600">${pos.name}</div>
+              <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
             </td>
-            <td class="table__td" title="\${market.label || pos.market}" style="text-align: center;">
-              \${market.flag || ''}
+            <td class="table__td" title="${market.label || pos.market}" style="text-align: center;">
+              ${market.flag || ''}
             </td>
             <td class="table__td" style="text-align: center;">
-              \${statusIndicator}
+              ${statusIndicator}
             </td>
             <td class="table__td table__td--right table__td--mono">
-              \${fmtNative(currentPrice, currency)}
+              ${fmtNative(currentPrice, currency)}
             </td>
-            <td class="table__td table__td--right table__td--mono table__td--\${getPnLClass(dayPnl)}">
-              \${formatCurrency(dayPnl, 'CNY', true)}
+            <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(dayPnl)}">
+              ${formatCurrency(dayPnl, 'CNY', true)}
             </td>
           </tr>
-        \`;
+        `;
       }).join('');
 
-  overlay.innerHTML = \`
+  overlay.innerHTML = `
     <div style="
       background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
       border-radius:20px; padding:24px; width:90%; max-width:600px; 
@@ -643,12 +643,12 @@ function showDayPnLModal(positions) {
             </tr>
           </thead>
           <tbody>
-            \${rowsHtml}
+            ${rowsHtml}
           </tbody>
         </table>
       </div>
     </div>
-  \`;
+  `;
 
   document.body.appendChild(overlay);
 
