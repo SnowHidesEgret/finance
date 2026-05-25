@@ -4,7 +4,7 @@ export async function renderLoginPage(container) {
   container.innerHTML = `
     <div style="
       position: fixed; inset: 0; 
-      background: url('./assets/alibaba_cave.png') center/cover no-repeat;
+      background: url('./assets/alibaba_cave.png') center/100% 100% no-repeat;
       display: flex; align-items: flex-end; justify-content: flex-end;
       padding: 5% 5%;
       z-index: 100;
