@@ -312,8 +312,8 @@ async function loadPositions() {
             <div style="font-weight:600">${pos.name}</div>
             <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
           </td>
-          <td class="table__td">
-            <span class="tag tag--${pos.market?.toLowerCase()}">${m.flag || ''} ${m.label || pos.market}</span>
+          <td class="table__td" title="${m.label || pos.market}">
+            ${m.flag || ''}
           </td>
           <td class="table__td table__td--right">${formatQuantity(pos.quantity)}</td>
           <td class="table__td table__td--right table__td--mono">${fmtNative(pos.open_price, currency)}</td>

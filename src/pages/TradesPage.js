@@ -126,8 +126,8 @@ async function loadTrades() {
             <div style="font-weight:600">${trade.name}</div>
             <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${trade.symbol}</div>
           </td>
-          <td class="table__td">
-            <span class="tag tag--${trade.market?.toLowerCase()}">${m.flag || ''} ${m.label || trade.market}</span>
+          <td class="table__td" title="${m.label || trade.market}">
+            ${m.flag || ''}
           </td>
           <td class="table__td">
             <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:bold;color:${typeColor};background:${typeBg};">

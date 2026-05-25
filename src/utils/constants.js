@@ -6,7 +6,7 @@
 export const MARKETS = {
   A_SHARE: {
     id: 'A_SHARE',
-    label: 'A 股',
+    label: '中国',
     flag: '<img src="https://flagcdn.com/w20/cn.png" alt="CN" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'CNY',
     color: 'var(--color-market-cn)',
@@ -17,7 +17,7 @@ export const MARKETS = {
   },
   HK: {
     id: 'HK',
-    label: '港股',
+    label: '香港',
     flag: '<img src="https://flagcdn.com/w20/hk.png" alt="HK" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'HKD',
     color: 'var(--color-market-hk)',
@@ -25,7 +25,7 @@ export const MARKETS = {
   },
   US: {
     id: 'US',
-    label: '美股',
+    label: '美国',
     flag: '<img src="https://flagcdn.com/w20/us.png" alt="US" style="width:18px; vertical-align:middle; border-radius:2px;">',
     currency: 'USD',
     color: 'var(--color-market-us)',
