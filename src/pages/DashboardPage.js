@@ -8,6 +8,7 @@ import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get } from '../services/api.js';
 import { getExchangeRates } from '../services/exchangeRate.js';
 import { summaryStore, positionsStore, marketStore } from '../store/index.js';
+import { isMarketOpen } from '../utils/marketHours.js';
 
 let currentSortField = 'weight';
 let currentSortOrder = 'desc';
@@ -41,7 +42,7 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__sub" id="val-total-pnl-pct">--</div>
           </div>
         </div>
-        <div class="kpi-card kpi-card--day animate-fade-in-up delay-3" id="kpi-day-pnl">
+        <div class="kpi-card kpi-card--day animate-fade-in-up delay-3" id="kpi-day-pnl" style="cursor:pointer;" title="点击查看今日盈亏明细">
           <div class="kpi-card__icon">📊</div>
           <div class="kpi-card__content">
             <div class="kpi-card__label">今日盈亏</div>
@@ -163,6 +164,14 @@ export async function renderDashboardPage(container) {
       updatePositionTable(cachedPositions);
     });
   });
+  
+  // 绑定今日盈亏点击事件
+  const dayPnlCard = container.querySelector('#kpi-day-pnl');
+  if (dayPnlCard) {
+    dayPnlCard.addEventListener('click', () => {
+      showDayPnLModal(cachedPositions);
+    });
+  }
   
   // 监听刷新事件
   const refreshHandler = () => loadDashboardData(container);
@@ -545,3 +554,105 @@ function showEmptyState() {
     `;
   }
 }
+
+/**
+ * 显示今日盈亏明细弹窗
+ */
+function showDayPnLModal(positions) {
+  document.getElementById('day-pnl-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'day-pnl-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
+
+  const openPositions = positions.filter(p => p.status === 'OPEN' || !p.status);
+  
+  const sorted = [...openPositions].sort((a, b) => {
+    const valA = a.dayPnLCNY || a.day_pnl_cny || 0;
+    const valB = b.dayPnLCNY || b.day_pnl_cny || 0;
+    return valB - valA; // desc
+  });
+
+  const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+  function fmtNative(amount, currency) {
+    const sym = CURRENCY_SYMBOL[currency] || '';
+    return \`\${sym}\${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\`;
+  }
+
+  const rowsHtml = sorted.length === 0 
+    ? \`<tr><td colspan="5" class="table__empty">暂无持仓</td></tr>\`
+    : sorted.map(pos => {
+        const market = MARKETS[pos.market] || {};
+        const currency = pos.currency || market.currency || 'CNY';
+        const dayPnl = pos.dayPnLCNY || pos.day_pnl_cny || 0;
+        const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
+
+        const isOpen = isMarketOpen(pos.market);
+        const statusIndicator = isOpen 
+          ? \`<span style="color:#10b981; font-size:0.875rem;" title="开盘中">🟢</span>\` 
+          : \`<span style="color:#64748b; font-size:0.875rem;" title="休市">⚪</span>\`;
+
+        return \`
+          <tr class="table__row table__row--hoverable">
+            <td class="table__td">
+              <div style="font-weight:600">\${pos.name}</div>
+              <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">\${pos.symbol}</div>
+            </td>
+            <td class="table__td" title="\${market.label || pos.market}" style="text-align: center;">
+              \${market.flag || ''}
+            </td>
+            <td class="table__td" style="text-align: center;">
+              \${statusIndicator}
+            </td>
+            <td class="table__td table__td--right table__td--mono">
+              \${fmtNative(currentPrice, currency)}
+            </td>
+            <td class="table__td table__td--right table__td--mono table__td--\${getPnLClass(dayPnl)}">
+              \${formatCurrency(dayPnl, 'CNY', true)}
+            </td>
+          </tr>
+        \`;
+      }).join('');
+
+  overlay.innerHTML = \`
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:90%; max-width:600px; 
+      box-shadow:var(--shadow-lg); max-height:80vh; display:flex; flex-direction:column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+          📊 今日盈亏明细
+        </h3>
+        <button id="close-day-pnl" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+      </div>
+      
+      <div class="table-wrapper" style="flex:1; overflow-y:auto; border-radius:12px;">
+        <table class="table" style="width:100%;">
+          <thead style="position:sticky; top:0; background:var(--color-bg-card); z-index:10;">
+            <tr>
+              <th class="table__th">股票</th>
+              <th class="table__th" style="text-align:center;">市场</th>
+              <th class="table__th" style="text-align:center;">状态</th>
+              <th class="table__th table__th--right">现价</th>
+              <th class="table__th table__th--right">今日盈亏(¥)</th>
+            </tr>
+          </thead>
+          <tbody>
+            \${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  \`;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-day-pnl').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
