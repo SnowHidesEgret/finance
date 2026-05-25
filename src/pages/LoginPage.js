@@ -5,7 +5,8 @@ export async function renderLoginPage(container) {
     <div style="
       position: fixed; inset: 0; 
       background: url('./assets/alibaba_cave.png') center/cover no-repeat;
-      display: flex; align-items: center; justify-content: center;
+      display: flex; align-items: flex-end; justify-content: flex-end;
+      padding: 5% 5%;
       z-index: 100;
     ">
       <div class="card animate-fade-in-up" style="
