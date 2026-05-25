@@ -37,8 +37,8 @@
   background: var(--color-bg-card);
   backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
   display: flex;
   gap: var(--space-4);
   align-items: flex-start;
@@ -105,8 +105,8 @@
   background: var(--color-bg-card);
   backdrop-filter: var(--glass-blur);
   border: var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
   position: relative;
   overflow: hidden;
 }
