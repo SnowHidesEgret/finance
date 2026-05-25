@@ -2,20 +2,48 @@ import { post } from '../services/api.js';
 
 export async function renderLoginPage(container) {
   container.innerHTML = `
-    <div class="card animate-fade-in-up" style="width: 100%; max-width: 400px; padding: 40px; text-align: center;">
-      <div style="font-size: 48px; margin-bottom: 16px;">🔐</div>
-      <h2 style="margin-bottom: 8px;">StockVault 登录</h2>
-      <p style="color: var(--color-text-secondary); margin-bottom: 32px; font-size: 0.875rem;" id="login-hint">请输入管理员密码</p>
-      
-      <form id="login-form">
-        <div class="form-group" style="text-align: left;">
-          <input type="password" id="login-password" class="form-control" placeholder="输入密码" required autofocus />
-        </div>
+    <div style="
+      position: fixed; inset: 0; 
+      background: url('./assets/alibaba_cave.png') center/cover no-repeat;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    ">
+      <div class="card animate-fade-in-up" style="
+        width: 100%; max-width: 440px; padding: 48px 40px; text-align: center;
+        background: rgba(17, 24, 39, 0.75);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      ">
+        <div style="font-size: 64px; margin-bottom: 16px; text-shadow: 0 0 20px rgba(250, 204, 21, 0.5);">✨</div>
+        <h2 style="margin-bottom: 12px; font-size: 2.25rem; font-weight: 700; background: linear-gradient(to right, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">混乱是阶梯</h2>
+        <p style="color: rgba(255, 255, 255, 0.9); margin-bottom: 32px; font-size: 1.25rem;" id="login-hint">芝麻开门：请输入开启宝库的密语</p>
         
-        <div id="login-error" style="color: var(--color-profit); font-size: 0.875rem; margin-bottom: 16px; min-height: 20px; display: none;"></div>
-        
-        <button type="submit" class="btn btn--primary" style="width: 100%; padding: 12px; font-size: 1rem;" id="login-btn">进入系统</button>
-      </form>
+        <form id="login-form">
+          <div class="form-group" style="text-align: left;">
+            <input type="password" id="login-password" class="form-control" placeholder="输入密语..." required autofocus style="
+              background: rgba(0, 0, 0, 0.6);
+              border: 1px solid rgba(255, 255, 255, 0.2);
+              font-size: 1.25rem;
+              padding: 16px;
+              color: #fff;
+              border-radius: 12px;
+            "/>
+          </div>
+          
+          <div id="login-error" style="color: #ef4444; font-size: 1.125rem; margin-bottom: 16px; min-height: 24px; display: none; text-shadow: 0 2px 4px rgba(0,0,0,0.8);"></div>
+          
+          <button type="submit" class="btn btn--primary" style="
+            width: 100%; padding: 16px; font-size: 1.25rem; font-weight: 600;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+            color: #fff;
+          " id="login-btn">进入宝库</button>
+        </form>
+      </div>
     </div>
   `;
   
