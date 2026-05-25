@@ -96,19 +96,8 @@ export async function renderDashboardPage(container) {
         </div>
       </section>
 
-      <!-- 持仓矩形树图 -->
-      <section class="dashboard__section animate-fade-in-up delay-4">
-        <div class="chart-container">
-          <div class="chart-container__header">
-            <h3 class="chart-container__title">持仓全景 — 矩形树图</h3>
-            <span class="chart-container__hint">面积 = 市值占比，颜色 = 盈亏幅度</span>
-          </div>
-          <div class="chart-container__body" id="chart-treemap" style="height:300px"></div>
-        </div>
-      </section>
-
       <!-- 持仓速览表 -->
-      <section class="dashboard__section animate-fade-in-up delay-5">
+      <section class="dashboard__section animate-fade-in-up delay-4">
         <h2 class="dashboard__section-title">
           <span class="dashboard__section-icon">📋</span>
           持仓明细
@@ -134,6 +123,17 @@ export async function renderDashboardPage(container) {
               <tr><td colspan="11" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- 持仓矩形树图 -->
+      <section class="dashboard__section animate-fade-in-up delay-5">
+        <div class="chart-container">
+          <div class="chart-container__header">
+            <h3 class="chart-container__title">持仓全景 — 矩形树图</h3>
+            <span class="chart-container__hint">面积 = 市值占比，颜色 = 盈亏幅度</span>
+          </div>
+          <div class="chart-container__body" id="chart-treemap" style="height:300px"></div>
         </div>
       </section>
     </div>
@@ -393,8 +393,8 @@ function updatePositionTable(positions, rates) {
           </div>
         </td>
         <td class="table__td table__td--mono">${pos.symbol}</td>
-        <td class="table__td">
-          <span class="tag tag--${pos.market?.toLowerCase()}">${market.flag || ''} ${market.label || pos.market}</span>
+        <td class="table__td" title="${market.label || pos.market}">
+          ${market.flag || ''}
         </td>
         <td class="table__td table__td--right">${formatQuantity(pos.quantity)}</td>
         <td class="table__td table__td--right table__td--mono" title="${hasLive ? '实时价格' : '使用开仓价'}">
