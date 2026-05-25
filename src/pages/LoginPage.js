@@ -4,14 +4,12 @@ export async function renderLoginPage(container) {
   container.innerHTML = `
     <div style="
       position: fixed; inset: 0; 
+      background: url('./assets/alibaba_cave.png') center/cover no-repeat;
       display: flex; align-items: flex-end; justify-content: flex-end;
       padding: 5% 5%;
       z-index: 100;
       background-color: #050505;
-      overflow: hidden;
     ">
-      <div style="position: absolute; inset: -5%; background: url('./assets/alibaba_cave.png') center/cover no-repeat; filter: blur(40px) brightness(0.5); z-index: -2;"></div>
-      <div style="position: absolute; inset: 0; background: url('./assets/alibaba_cave.png') center/contain no-repeat; z-index: -1;"></div>
       <div class="card animate-fade-in-up" style="
         width: 100%; max-width: 440px; padding: 48px 40px; text-align: center;
         background: rgba(17, 24, 39, 0.75);
