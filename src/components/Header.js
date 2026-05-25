@@ -33,7 +33,7 @@ export function renderHeader(container) {
               <circle cx="24" cy="14" r="2" fill="white"/>
             </svg>
           </div>
-          <h1 class="header__title">StockVault</h1>
+          <h1 class="header__title">混乱是阶梯</h1>
         </div>
       </div>
       <div class="header__center">
