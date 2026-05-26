@@ -1,5 +1,8 @@
 /* src/styles/dashboard.css */
 
+/* === Financial Monospace Font === */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+
 .dashboard {
   display: flex;
   flex-direction: column;
@@ -97,7 +100,7 @@
 .kpi-card__sub--loss { color: var(--color-loss); }
 .kpi-card__sub--neutral { color: var(--color-text-muted); }
 
-/* KPI 卡片右上角光晓 */
+/* KPI glow */
 .kpi-card::before {
   content: '';
   position: absolute;
@@ -116,23 +119,75 @@
 .kpi-card[data-kpi-type='loss']::before    { --kpi-glow: rgba(16, 185, 129, 0.3); }
 .kpi-card[data-kpi-type='neutral']::before { --kpi-glow: rgba(99, 102, 241, 0.3); }
 
-/* Market Overview Cards */
+/* ========================================
+   Market Overview Cards — Premium Redesign
+   ======================================== */
+
 .dashboard__market-overview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
 }
 
+/* --- Card Shell: Glassmorphism + Neon Glow --- */
 .market-summary-card {
-  background: var(--color-bg-card);
-  backdrop-filter: var(--glass-blur);
-  border: var(--glass-border);
+  --card-accent: var(--color-accent);
+  background: linear-gradient(165deg, rgba(17,24,39,0.85) 0%, rgba(15,23,42,0.75) 100%);
+  backdrop-filter: blur(28px) saturate(1.3);
+  border: 1px solid rgba(255,255,255,0.07);
   border-radius: var(--radius-xl);
-  padding: var(--space-6);
+  padding: var(--space-5) var(--space-5) var(--space-4);
   position: relative;
   overflow: hidden;
+  transition: var(--transition-base);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 0 rgba(255,255,255,0.06);
 }
 
+/* Top neon accent bar */
+.market-summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--card-accent);
+  box-shadow: 0 0 12px var(--card-accent), 0 0 4px var(--card-accent);
+  opacity: 0.85;
+}
+
+/* Corner glow orb */
+.market-summary-card::after {
+  content: '';
+  position: absolute;
+  top: -30px;
+  right: -30px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--card-accent), transparent 65%);
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.market-summary-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 24px color-mix(in srgb, var(--card-accent) 25%, transparent),
+    inset 0 1px 0 0 rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.12);
+}
+
+/* Per-market accent colors */
+.market-summary-card--a_share { --card-accent: var(--color-market-cn); }
+.market-summary-card--hk      { --card-accent: var(--color-market-hk); }
+.market-summary-card--us      { --card-accent: var(--color-market-us); }
+.market-summary-card--swiss   { --card-accent: var(--color-market-ch); }
+
+/* --- Header --- */
 .market-summary-card__header {
   display: flex;
   align-items: center;
@@ -140,82 +195,227 @@
   margin-bottom: var(--space-4);
 }
 
+.market-summary-card__flag {
+  display: inline-flex;
+}
+.market-summary-card__flag img {
+  width: 22px;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
 .market-summary-card__name {
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-text-primary);
+  letter-spacing: 0.01em;
 }
 
 .market-summary-card__count {
   margin-left: auto;
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  background: rgba(255,255,255,0.05);
-  padding: 2px 6px;
-  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: rgba(255,255,255,0.08);
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.06);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
 }
 
+/* --- Body Stats Grid --- */
 .market-summary-card__body {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: var(--space-3);
+}
+
+.market-summary-card__stat-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.market-summary-card__stat-row:last-child {
+  border-bottom: none;
 }
 
 .market-summary-card__stat {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+.market-summary-card__stat--primary {
+  flex: 1;
+}
+.market-summary-card__stat--secondary {
+  flex: 1;
 }
 
 .market-summary-card__stat-label {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .market-summary-card__stat-value {
-  font-size: 1rem;
-  font-weight: 600;
-  font-family: monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+  color: var(--color-text-primary);
 }
+
+/* Primary value (market cap): LARGE & BOLD */
+.market-summary-card__stat-value--primary {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.25;
+}
+
+/* Secondary value (P&L, yield): medium */
+.market-summary-card__stat-value--secondary {
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .market-summary-card__stat-value--profit { color: var(--color-profit); }
 .market-summary-card__stat-value--loss { color: var(--color-loss); }
 
+/* Arrow indicator for P&L */
+.market-summary-card__arrow {
+  font-size: 0.75em;
+  margin-right: 2px;
+  vertical-align: middle;
+  display: inline-block;
+}
+
+/* --- Sparkline (mini trend chart area) --- */
+.market-summary-card__sparkline-area {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  min-height: 56px;
+}
+
+.market-summary-card__sparkline-data {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.market-summary-card__sparkline-chart {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.market-summary-card__sparkline-chart svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* --- Bottom Progress Bar with Shimmer --- */
 .market-summary-card__bar {
-  height: 6px;
-  background: rgba(255,255,255,0.05);
+  height: 5px;
+  background: rgba(255,255,255,0.06);
   border-radius: 3px;
   position: relative;
-  margin-bottom: var(--space-2);
+  overflow: hidden;
 }
 
 .market-summary-card__bar-fill {
   height: 100%;
   border-radius: 3px;
-  background: var(--color-accent);
+  background: var(--card-accent);
+  position: relative;
+  transition: width 0.8s var(--ease-out);
 }
 
-.market-summary-card--a_share { box-shadow: var(--shadow-md), inset 0 2px 0 0 var(--color-market-cn); }
-.market-summary-card--hk      { box-shadow: var(--shadow-md), inset 0 2px 0 0 var(--color-market-hk); }
-.market-summary-card--us      { box-shadow: var(--shadow-md), inset 0 2px 0 0 var(--color-market-us); }
-.market-summary-card--swiss   { box-shadow: var(--shadow-md), inset 0 2px 0 0 var(--color-market-ch); }
+/* Shimmer sweep on progress bar */
+.market-summary-card__bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255,255,255,0.25) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: barShimmer 2.5s ease-in-out infinite;
+}
 
-.market-summary-card--a_share .market-summary-card__bar-fill { background: var(--color-market-cn); }
-.market-summary-card--hk .market-summary-card__bar-fill { background: var(--color-market-hk); }
-.market-summary-card--us .market-summary-card__bar-fill { background: var(--color-market-us); }
-.market-summary-card--swiss .market-summary-card__bar-fill { background: var(--color-market-ch); }
+@keyframes barShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 .market-summary-card__bar-label {
   font-size: 0.75rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: 500;
   color: var(--color-text-muted);
-  position: absolute;
-  right: 0;
-  top: 10px;
+  text-align: right;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
-/* Charts Row */
+.market-summary-card__bar-diamond {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--card-accent);
+  transform: rotate(45deg);
+  border-radius: 1px;
+  opacity: 0.7;
+}
+
+/* --- Charts Row --- */
 .dashboard__charts-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-4);
+}
+
+/* Light theme overrides for market cards */
+[data-theme='light'] .market-summary-card {
+  background: linear-gradient(165deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.88) 100%);
+  border-color: rgba(0,0,0,0.06);
+}
+[data-theme='light'] .market-summary-card::before {
+  opacity: 0.5;
+}
+[data-theme='light'] .market-summary-card__stat-row {
+  border-bottom-color: rgba(0,0,0,0.05);
+}
+[data-theme='light'] .market-summary-card__sparkline-area {
+  border-bottom-color: rgba(0,0,0,0.05);
+}
+[data-theme='light'] .market-summary-card__bar {
+  background: rgba(0,0,0,0.06);
+}
+[data-theme='light'] .market-summary-card__count {
+  background: rgba(0,0,0,0.05);
+  border-color: rgba(0,0,0,0.08);
+  color: var(--color-text-secondary);
 }
 
 @media (max-width: 1199px) {
@@ -225,4 +425,5 @@
 
 @media (max-width: 767px) {
   .dashboard__kpi-row, .dashboard__market-overview { grid-template-columns: 1fr; }
+  .market-summary-card__stat-value--primary { font-size: 1.4rem; }
 }

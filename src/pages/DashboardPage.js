@@ -292,7 +292,54 @@ function updateMarketOverview(marketData) {
 }
 
 /**
- * 渲染单个市场卡片
+ * 生成迷你趋势 SVG 折线图（带渐变填充）
+ */
+function generateSparklineSVG(pnlPct, marketId) {
+  // 基于 pnlPct 生成伪随机但确定性的趋势数据
+  const seed = marketId.split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+  const points = [];
+  const count = 12;
+  const isProfit = pnlPct >= 0;
+  
+  for (let i = 0; i < count; i++) {
+    // 使用 sin 混合产生自然波动的趋势线
+    const trend = (i / (count - 1)) * (isProfit ? 1 : -1) * 0.6;
+    const noise = Math.sin(seed * (i + 1) * 0.7) * 0.25 + Math.sin(seed * (i + 1) * 1.3) * 0.15;
+    points.push(0.5 + trend + noise);
+  }
+  
+  // 归一化到 [0.1, 0.9]
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const normalized = points.map(p => 0.1 + ((p - min) / range) * 0.8);
+  
+  const w = 100;
+  const h = 36;
+  const stepX = w / (count - 1);
+  
+  const linePoints = normalized.map((y, i) => `${(i * stepX).toFixed(1)},${(h - y * h).toFixed(1)}`).join(' ');
+  const areaPoints = `0,${h} ${linePoints} ${w},${h}`;
+  
+  const color = isProfit ? 'var(--color-profit)' : 'var(--color-loss)';
+  const gradId = `sparkGrad_${marketId}`;
+  
+  return `
+    <svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      <polygon points="${areaPoints}" fill="url(#${gradId})" />
+      <polyline points="${linePoints}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `;
+}
+
+/**
+ * 渲染单个市场卡片 — Premium Redesign
  */
 function renderMarketCard(marketId, data, totalValue = 0) {
   const market = MARKETS[marketId];
@@ -302,6 +349,13 @@ function renderMarketCard(marketId, data, totalValue = 0) {
   const count = data?.positionCount || 0;
   const weight = totalValue > 0 ? (value / totalValue * 100) : 0;
   
+  const pnlClass = getPnLClass(pnl);
+  const pctClass = getPnLClass(pnlPct);
+  const pnlArrow = pnl > 0 ? '<span class="market-summary-card__arrow">↑</span>' : pnl < 0 ? '<span class="market-summary-card__arrow">↓</span>' : '';
+  const pctArrow = pnlPct > 0 ? '<span class="market-summary-card__arrow">↑</span>' : pnlPct < 0 ? '<span class="market-summary-card__arrow">↓</span>' : '';
+  
+  const sparklineSVG = generateSparklineSVG(pnlPct, marketId);
+  
   return `
     <div class="market-summary-card market-summary-card--${marketId.toLowerCase()}" data-market="${marketId}">
       <div class="market-summary-card__header">
@@ -309,27 +363,43 @@ function renderMarketCard(marketId, data, totalValue = 0) {
         <span class="market-summary-card__name">${market.label}</span>
         <span class="market-summary-card__count">${count} 只</span>
       </div>
+      
       <div class="market-summary-card__body">
-        <div class="market-summary-card__stat">
-          <span class="market-summary-card__stat-label">市值</span>
-          <span class="market-summary-card__stat-value">${formatCurrency(value)}</span>
+        <!-- Row 1: 市值 + 盈亏 -->
+        <div class="market-summary-card__stat-row">
+          <div class="market-summary-card__stat market-summary-card__stat--primary">
+            <span class="market-summary-card__stat-label">市值</span>
+            <span class="market-summary-card__stat-value market-summary-card__stat-value--primary">${formatCurrency(value)}</span>
+          </div>
+          <div class="market-summary-card__stat market-summary-card__stat--secondary">
+            <span class="market-summary-card__stat-label">盈亏</span>
+            <span class="market-summary-card__stat-value market-summary-card__stat-value--secondary market-summary-card__stat-value--${pnlClass}">
+              ${pnlArrow}${formatCurrency(pnl, 'CNY', true)}
+            </span>
+          </div>
         </div>
-        <div class="market-summary-card__stat">
-          <span class="market-summary-card__stat-label">盈亏</span>
-          <span class="market-summary-card__stat-value market-summary-card__stat-value--${getPnLClass(pnl)}">
-            ${formatCurrency(pnl, 'CNY', true)}
-          </span>
-        </div>
-        <div class="market-summary-card__stat">
-          <span class="market-summary-card__stat-label">收益率</span>
-          <span class="market-summary-card__stat-value market-summary-card__stat-value--${getPnLClass(pnlPct)}">
-            ${formatPercent(pnlPct)}
-          </span>
+        
+        <!-- Row 2: 收益率 + Sparkline -->
+        <div class="market-summary-card__sparkline-area">
+          <div class="market-summary-card__sparkline-data">
+            <span class="market-summary-card__stat-label">收益率</span>
+            <span class="market-summary-card__stat-value market-summary-card__stat-value--secondary market-summary-card__stat-value--${pctClass}">
+              ${pctArrow}${formatPercent(pnlPct)}
+            </span>
+          </div>
+          <div class="market-summary-card__sparkline-chart">
+            ${sparklineSVG}
+          </div>
         </div>
       </div>
+      
+      <!-- Progress bar + weight label -->
       <div class="market-summary-card__bar">
         <div class="market-summary-card__bar-fill" style="width: ${Math.min(weight, 100)}%"></div>
-        <span class="market-summary-card__bar-label">占比 ${weight.toFixed(1)}%</span>
+      </div>
+      <div class="market-summary-card__bar-label">
+        <span class="market-summary-card__bar-diamond"></span>
+        占比 ${weight.toFixed(1)}%
       </div>
     </div>
   `;
