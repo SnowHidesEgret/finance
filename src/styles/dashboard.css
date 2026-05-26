@@ -310,14 +310,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
+  flex: 3;
   min-width: 0;
 }
 
 .market-summary-card__sparkline-chart {
   flex: 1;
   min-width: 0;
-  max-width: 50%;
   height: 38px;
   display: flex;
   align-items: flex-end;
