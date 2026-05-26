@@ -87,6 +87,19 @@
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
 }
 
+[data-font-size='small'] {
+  --app-font-size: 14px;
+}
+[data-font-size='medium'] {
+  --app-font-size: 16px;
+}
+[data-font-size='large'] {
+  --app-font-size: 18px;
+}
+[data-font-size='xlarge'] {
+  --app-font-size: 20px;
+}
+
 /* Reset */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -99,6 +112,7 @@ html, body {
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   font-family: 'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: var(--app-font-size, 18px);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }

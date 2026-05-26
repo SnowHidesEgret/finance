@@ -127,9 +127,17 @@ export const COLOR_SCHEMES = {
 };
 
 /** 默认设置 */
+export const FONT_SIZES = {
+  SMALL: 'small',
+  MEDIUM: 'medium',
+  LARGE: 'large',
+  XLARGE: 'xlarge'
+};
+
 export const DEFAULT_SETTINGS = {
   colorScheme: COLOR_SCHEMES.CN,
   theme: 'dark',
+  fontSize: FONT_SIZES.LARGE, // Default to large for better readability
   refreshInterval: 60000, // 1 分钟
   language: 'zh-CN'
 };

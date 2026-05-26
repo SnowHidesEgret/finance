@@ -4,11 +4,13 @@
 import { put } from '../services/api.js';
 import { getColorScheme, setColorScheme } from '../utils/colorScheme.js';
 import { getAppTheme, setAppTheme } from '../utils/appTheme.js';
+import { getFontSize, setFontSize } from '../utils/fontSize.js';
 import { COLOR_SCHEMES } from '../utils/constants.js';
 
 export async function renderSettingsPage(container) {
   const currentScheme = getColorScheme();
   const currentTheme = getAppTheme();
+  const currentFontSize = getFontSize();
   
   container.innerHTML = `
     <div class="page-container animate-fade-in-up">
@@ -67,6 +69,30 @@ export async function renderSettingsPage(container) {
           </div>
         </div>
 
+        <div class="form-group" style="margin-bottom:24px;">
+          <label class="form-label" style="font-size:1rem; font-weight:600; color:var(--color-text-primary)">字体大小</label>
+          <p style="font-size:0.875rem; color:var(--color-text-secondary); margin-bottom:12px;">调整全局字体大小，以获得更好的阅读体验。</p>
+          
+          <div style="display:flex; gap:16px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid ${currentFontSize === 'small' ? 'var(--color-accent)' : 'transparent'}">
+              <input type="radio" name="font_size" value="small" ${currentFontSize === 'small' ? 'checked' : ''} onchange="window.handleFontSizeChange('small')">
+              <div style="font-weight:500;">小 (14px)</div>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid ${currentFontSize === 'medium' ? 'var(--color-accent)' : 'transparent'}">
+              <input type="radio" name="font_size" value="medium" ${currentFontSize === 'medium' ? 'checked' : ''} onchange="window.handleFontSizeChange('medium')">
+              <div style="font-weight:500;">中 (16px)</div>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid ${currentFontSize === 'large' ? 'var(--color-accent)' : 'transparent'}">
+              <input type="radio" name="font_size" value="large" ${currentFontSize === 'large' ? 'checked' : ''} onchange="window.handleFontSizeChange('large')">
+              <div style="font-weight:500;">大 (18px)</div>
+            </label>
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; padding:12px 16px; background:rgba(255,255,255,0.05); border-radius:8px; border:1px solid ${currentFontSize === 'xlarge' ? 'var(--color-accent)' : 'transparent'}">
+              <input type="radio" name="font_size" value="xlarge" ${currentFontSize === 'xlarge' ? 'checked' : ''} onchange="window.handleFontSizeChange('xlarge')">
+              <div style="font-weight:500;">超大 (20px)</div>
+            </label>
+          </div>
+        </div>
+
       </div>
 
       <div class="card" style="max-width: 600px; margin-top: 24px;">
@@ -100,6 +126,11 @@ export async function renderSettingsPage(container) {
 
   window.handleThemeChange = (theme) => {
     setAppTheme(theme);
+    renderSettingsPage(container);
+  };
+
+  window.handleFontSizeChange = (size) => {
+    setFontSize(size);
     renderSettingsPage(container);
   };
 
