@@ -130,7 +130,7 @@ async function loadTrades() {
             ${m.flag || ''}
           </td>
           <td class="table__td">
-            <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:bold;color:${typeColor};background:${typeBg};">
+            <span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:bold;color:${typeColor};background:${typeBg};white-space:nowrap;">
               ${typeLabel}
             </span>
           </td>
