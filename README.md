@@ -1,41 +1,104 @@
 # StockVault 📈
 
-StockVault 是一个专为全球投资者打造的现代化股票持仓管理与分析系统。基于 Cloudflare 生态（Pages + Functions + D1）实现完全的 Serverless 部署，为您的 A股、港股、美股以及瑞士股票等多元化资产提供一站式的追踪、统计与可视化展示。
+<p align="center">
+  <img src="https://img.shields.io/badge/Architecture-Serverless-blueviolet?style=for-the-badge" alt="Architecture" />
+  <img src="https://img.shields.io/badge/Frontend-Vanilla--JS-yellow?style=for-the-badge&logo=javascript" alt="Frontend" />
+  <img src="https://img.shields.io/badge/Backend-Cloudflare--Functions-orange?style=for-the-badge&logo=cloudflare" alt="Backend" />
+  <img src="https://img.shields.io/badge/Database-D1--SQLite-blue?style=for-the-badge&logo=sqlite" alt="Database" />
+</p>
+
+StockVault 是一个专为全球投资者打造的现代化股票持仓管理与分析系统。基于 **Cloudflare 生态（Pages + Functions + D1 SQLite）** 实现完全的 **Serverless** 部署，为您的 A股、港股、美股以及瑞士股票等多元化资产提供一站式的追踪、统计与可视化展示。
+
+---
 
 ## ✨ 核心特性
 
-- 🌍 **多市场覆盖**：原生支持 A股 (CNY)、港股 (HKD)、美股 (USD) 和瑞士市场 (CHF)。
-- 💱 **智能实时汇率**：内置 Frankfurter 实时汇率 API 引擎，自动将所有外币资产转换为人民币 (CNY) 进行汇总计价。
-- 📊 **高级数据可视化**：基于 ECharts 构建全景仪表盘，涵盖资产分布饼图、盈亏倒排条形图、市值矩形树图 (Treemap) 等。
-- 🎨 **极致视觉体验**：采用深色模式与拟态玻璃 (Glassmorphism) 材质设计，界面美观专业。
-- 🔄 **个性化偏好设置**：支持一键切换“红涨绿跌”与“绿涨红跌”两种颜色方案，适配不同用户的看盘习惯。
-- 📥 **灵活的数据流转**：纯前端集成 SheetJS，支持通过 CSV/Excel (.xlsx) 文件进行大规模历史交易记录的智能批量导入。
-- 🔐 **云端安全代理**：API 密钥 (如 Alpha Vantage) 存放于 Cloudflare 云端环境变量，彻底杜绝前端硬编码带来的泄露风险。
+- 🌍 **多市场覆盖**：原生支持 A股 (CNY)、港股 (HKD)、美股 (USD) 和瑞士市场 (CHF)，满足全球化资产配置需求。
+- 💱 **智能实时汇率**：内置 Frankfurter 实时汇率 API 引擎，自动将所有外币资产转换为人民币 (CNY) 进行汇总计价与盈亏结算。
+- 📊 **高级数据可视化**：基于 ECharts 构建全景可视化大屏，涵盖资产分布饼图、个股盈亏倒排条形图、市值矩形树图 (Treemap) 等，多维度剖析您的投资组合。
+- 🎨 **极致视觉体验**：采用深色模式与拟态玻璃 (Glassmorphism) 材质设计，动效柔和，组件精致，提供极具现代感的金融终端级视觉体验。
+- 🔄 **个性化偏好设置**：支持一键切换“红涨绿跌（国内）”与“绿涨红跌（国际）”两种颜色方案；支持配置全局行情自动轮询刷新时间。
+- 📥 **灵活的数据流转**：纯前端集成 SheetJS，支持通过 CSV/Excel (.xlsx) 文件进行大规模历史交易记录的智能模糊表头映射批量导入，并提供详细的导入格式校验报错提示。
+- 🔐 **云端安全代理**：接口请求全部经由边缘 Serverless 函数进行鉴权与安全过滤，且所有数据通过 Token 保护，彻底杜绝前端硬编码带来的泄露风险。
+
+---
 
 ## 🛠 技术栈
 
-- **前端框架**: Vite + 原生 JavaScript (ESM) + Vanilla CSS
-- **图表渲染**: ECharts (搭配专属自定义深色主题)
-- **数据处理**: SheetJS (xlsx)
-- **后端 API**: Cloudflare Pages Functions
-- **数据库**: Cloudflare D1 (Serverless SQLite)
-- **外部接口**: Alpha Vantage (股票行情), Frankfurter (免费汇率)
+### 前端 (Frontend)
+- **核心框架**: Vite + 原生 JavaScript (ESM) + Vanilla CSS (零重型依赖，页面毫秒级加载)
+- **图表渲染**: ECharts (搭配专属定制深色主题)
+- **数据解析**: SheetJS (`xlsx` 纯浏览器端解析)
+- **设计风格**: 拟态玻璃材质 (Glassmorphism) + 全局 CSS 变量控制
+
+### 后端与数据库 (Backend & Database)
+- **边缘算力**: Cloudflare Pages Functions (基于 V8 Runtime 的 Serverless API)
+- **云数据库**: Cloudflare D1 (全网分布式 Serverless SQLite)
+- **三方集成**: Yahoo Finance (实时行情), Frankfurter (实时汇率)
+
+---
+
+## 📐 系统架构与核心设计
+
+```mermaid
+graph TD
+    SubGraph_Client[前端浏览器] -->|Hash路由导航| Router[轻量级 Hash Router]
+    SubGraph_Client -->|状态订阅更新| Store[Pub-Sub 响应式 Store]
+    SubGraph_Client -->|纯前端解析| SheetJS[SheetJS 导入导出]
+    SubGraph_Client -->|深色主题渲染| ECharts[ECharts 可视化]
+    
+    Router -->|AJAX Fetch| Middleware[CF Middleware: Cors/Error/Auth]
+    
+    subgraph Cloudflare Pages Functions
+        Middleware -->|路由分发| API[API Endpoints: Summary / Positions / Trades]
+    end
+    
+    API -->|缓存读取 / 写入| D1[Cloudflare D1 Serverless SQLite]
+    API -->|实时行情获取| Yahoo[Yahoo Finance API]
+    API -->|实时汇率获取| Frankfurter[Frankfurter FX API]
+```
+
+### 1. 轻量级 SPA 路由器 (`src/router/`)
+系统自主实现了一个轻量级 Hash 路由器，具备以下核心能力：
+- 支持路径参数匹配（例如 `/market/:id`）。
+- 具有前置鉴权钩子 (`beforeEach`)，实现未登录状态的自动拦截与重定向。
+- 配合 CSS 动画，在路由切换时提供平滑的页面淡入淡出过渡动画 (`page-enter` / `page-exit`)。
+
+### 2. 发布订阅式状态机 (`src/store/`)
+为了解决原生 JS 多组件间数据同步的难题，系统封装了基于 **发布-订阅模式** 的全局状态管理器（Store）：
+- 分离了 `positionsStore`（持仓数据）、`marketStore`（实时行情）、`summaryStore`（盈亏统计）以及 `settingsStore`（个性化配置）。
+- 支持属性级别的精细化订阅监听，确保了“一处数据修改，多处视图实时联动”。
+
+### 3. 后端 Serverless 安全鉴权中间件 (`functions/api/`)
+后端采用 Cloudflare Pages Functions 实现了安全的中间件拦截链（Middleware Chain）：
+- **跨域与监控**: 提供 CORS 预检处理，并计算响应耗时写入 `X-Response-Time` 响应头中。
+- **安全鉴权**: 除了登录接口外，所有数据操作接口均需通过统一的 Token 鉴权中间件，直接对接云端 D1 数据库进行校验，防范越权数据操纵。
+
+---
+
+## 🗄 数据库结构设计
+
+系统数据库包含以下核心表结构：
+
+* **`positions`** (持仓主表)：存储当前所有 OPEN/CLOSED 状态的持仓，包含开仓价、开仓汇率、数量、手续费、平仓结算信息、所属行业 (`sector`) 和系统性风险系数 (`beta`)。
+* **`trades`** (交易明细表)：记录每一笔 BUY/SELL 指令的流水数据，与持仓主表进行外键级联。
+* **`quote_cache`** (行情缓存表)：以股票代码为主键，缓存最新抓取的实时报价与昨收，以极大地减缓外部 API 限频并加速数据渲染。
+* **`exchange_rates`** (汇率缓存表)：缓存人民币对主要外币的实时换算汇率。
+* **`portfolio_snapshots`** (净值快照表)：每日定时保存每个市场及全局的总成本、总市值及总累计盈亏，为资产净值曲线提供数据基础。
+* **`user_settings`** (用户配置表)：用于持久化存储系统偏好及加密凭证。
+
+---
 
 ## 🚀 部署指南 (Cloudflare)
 
-本项目专门针对 Cloudflare 边缘网络生态优化。
+本项目专门针对 Cloudflare 边缘网络生态优化，推荐采用完全托管的 Pages 方案部署。
 
-### 1. 准备工作
-- 拥有一个 Cloudflare 账号。
-- 获取您的 Alpha Vantage API Key。
-- 将本代码仓库提交并推送到 GitHub。
-
-### 2. 数据库配置
-使用 Wrangler CLI 在 Cloudflare 创建 D1 数据库：
+### 1. 创建 Cloudflare D1 数据库
+在您的本地项目根目录下，使用 Wrangler CLI 工具创建一个 D1 实例：
 ```bash
 npx wrangler d1 create stockvault-db
 ```
-复制终端输出的 `database_id`，并更新至项目根目录的 `wrangler.toml` 文件中：
+创建成功后，复制终端输出的数据库配置段落，并覆盖更新项目根目录下的 `wrangler.toml` 文件：
 ```toml
 [[d1_databases]]
 binding = "DB"
@@ -43,44 +106,65 @@ database_name = "stockvault-db"
 database_id = "您的-database-id-填在这里"
 ```
 
-初始化数据库表结构：
+### 2. 初始化数据库表结构
+在远程云数据库上执行 D1 SQL 脚本，建立数据表、索引及触发器：
 ```bash
 npx wrangler d1 execute stockvault-db --file=./db/schema.sql --remote
 ```
 
-### 3. 创建 Cloudflare Pages
-在 Cloudflare 控制台中：
-1. 导航至 **Workers & Pages** -> **Create application** -> **Pages** -> **Connect to Git**。
+### 3. 创建 Cloudflare Pages 项目
+1. 登录 Cloudflare 控制台，进入 **Workers & Pages** -> **Create application** -> **Pages** -> **Connect to Git**。
 2. 选择本项目的 GitHub 仓库。
-3. **构建设置**：
-   - Framework preset: `Vite`
-   - Build command: `npm run build`
-   - Build output directory: `dist`
+3. **构建与输出设置**：
+   - **Framework preset**: `Vite`
+   - **Build command**: `npm run build`
+   - **Build output directory**: `dist`
+4. 点击 **Save and Deploy** 开始初次部署。
 
-### 4. 环境变量与域名设置
-部署完成后，进入 Pages 项目设置：
-- **环境变量**：添加 `ALPHA_VANTAGE_KEY`，值为您的 API 密钥（生产和预览环境均需添加）。
-- **自定义域名**：在 Custom domains 面板中，添加您的域名（如 `finance.snowyegret.top`）。
+### 4. 自定义域名配置
+部署完成后，进入该 Pages 项目：
+- （可选）在 **Settings** -> **Custom domains** 面板中绑定您的专属自定义域名（如 `finance.example.com`）。
 
-## 💻 本地开发
+---
 
-克隆代码后，在本地进行调试和开发：
+## 💻 本地开发调试
+
+您可以在本地开发环境启动完整的边缘函数模拟环境：
 
 ```bash
-# 安装依赖
+# 1. 安装项目依赖
 npm install
 
-# 运行本地开发服务器 (含 Functions API 模拟环境)
+# 2. 初始化本地模拟 D1 数据库
+npx wrangler d1 execute stockvault-db --file=./db/schema.sql --local
+
+# 3. 启动本地 Wrangler 边缘代理开发服务器 (支持 Functions API 与本地静态资源热更新)
 npx wrangler pages dev dist
 ```
-> 注：本地开发时，需要本地 SQLite 支持，可以先运行 `npx wrangler d1 execute stockvault-db --file=./db/schema.sql --local` 来初始化本地数据库，然后运行 `npx wrangler pages dev .` 启动模拟。
 
-## 📝 数据导入说明
+---
 
-在“导入导出”页面，您可以下载 CSV 模板文件。
-系统支持自动识别中文/英文表头，包含字段：
-`股票代码`, `股票名称`, `市场(A_SHARE/HK/US/SWISS)`, `交易类型(BUY/SELL)`, `价格`, `数量`, `日期`, `手续费(可选)`, `备注(可选)`, `行业(可选)`, `贝塔值(可选)`。
+## 📝 批量数据导入规范
 
-## 📄 协议
+在“导入导出”页面，您可以下载标准的 CSV 导入模板。
+系统拥有极高的表头词义识别容错率，导入文件时会自动识别以下中英文表头列：
+
+| 推荐表头 | 支持的同义表头名称 (大小写不敏感) | 是否必填 | 格式要求 |
+| :--- | :--- | :--- | :--- |
+| **股票代码** | `symbol`, `代码`, `ticker`, `code` | **是** | A股如 `600519.SHH`/`000001.SHZ`，美股如 `AAPL`，港股如 `0700.HKG` |
+| **股票名称** | `name`, `股票名称`, `名称`, `stock_name` | **是** | 任意字符串，如 `贵州茅台` |
+| **市场** | `market`, `市场`, `exchange`, `交易所` | **是** | 支持 `A股`/`A_SHARE`、`美股`/`US`、`港股`/`HK`、`瑞士`/`SWISS` |
+| **交易类型** | `trade_type`, `交易类型`, `方向`, `side`, `action` | **是** | 支持 `买入`/`BUY`、`卖出`/`SELL` |
+| **价格** | `price`, `价格`, `成交价`, `trade_price` | **是** | 大于 0 的数值 |
+| **数量** | `quantity`, `数量`, `股数`, `shares` | **是** | 大于 0 的数值 |
+| **日期** | `trade_date`, `日期`, `date`, `交易日期` | **是** | 支持 `YYYY-MM-DD`, `DD/MM/YYYY`, `YYYY年MM月DD日` 等常用日期格式 |
+| **手续费** | `commission`, `手续费`, `佣金`, `fee` | 否 | 正数，缺省为 0 |
+| **备注** | `notes`, `备注`, `remark`, `comment` | 否 | 任意备注信息 |
+| **行业** | `sector`, `行业`, `industry`, `板块` | 否 | 行业类别，如 `科技`、`消费` |
+| **贝塔值** | `beta`, `贝塔`, `贝塔值`, `β` | 否 | 数值，代表股票系统性风险系数 |
+
+---
+
+## 📄 开源协议
 
 本项目作为开源或个人研究用途。所引用的第三方 API 均遵循其各自的服务条款。

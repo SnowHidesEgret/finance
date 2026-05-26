@@ -1,6 +1,6 @@
 /**
  * StockVault — 股票行情服务
- * 通过 Cloudflare Functions 代理调用 Alpha Vantage
+ * 通过 Cloudflare Functions 代理调用 Yahoo Finance
  */
 
 import { get } from './api.js';
@@ -72,7 +72,7 @@ export async function getQuotes(symbols, forceRefresh = false) {
     toFetch.push(symbol);
   }
   
-  // Alpha Vantage 免费版有限制，逐个请求（带间隔）
+  // 为防范接口频次限制限制，逐个请求（带间隔）
   for (const symbol of toFetch) {
     try {
       const data = await getQuote(symbol, true);

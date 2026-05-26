@@ -7,8 +7,3 @@ binding = "DB"
 database_name = "stockvault-db"
 database_id = "4eb37949-d3e8-442b-bbb1-80ce8bef9f0d"
 
-[vars]
-ALPHA_VANTAGE_BASE = "https://www.alphavantage.co/query"
-
-# ALPHA_VANTAGE_KEY must be set as an encrypted secret:
-#   npx wrangler pages secret put ALPHA_VANTAGE_KEY

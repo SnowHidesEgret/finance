@@ -1,8 +1,8 @@
 /**
  * @fileoverview GET /api/stock/quote?symbol=AAPL
  *
- * Returns a normalised stock quote. Tries the D1 quote_cache first (5-minute
- * TTL), then falls back to Alpha Vantage GLOBAL_QUOTE if the cache is stale
+ * Returns a normalised stock quote. Tries the D1 quote_cache first (60-second
+ * TTL), then falls back to Yahoo Finance Chart API if the cache is stale
  * or missing.
  */
 
@@ -10,9 +10,9 @@
 const CACHE_TTL_SECONDS = 60;
 
 /**
- * Parse the messy Alpha Vantage key names into clean camelCase.
- * @param {object} raw – the "Global Quote" object from Alpha Vantage
- * @returns {object}   – normalised quote
+ * Parse Yahoo Finance chart meta details into clean camelCase.
+ * @param {object} meta – the chart meta object from Yahoo Finance
+ * @returns {object}    – normalised quote
  */
 function normaliseQuote(meta) {
   const price = meta.regularMarketPrice || 0;
@@ -88,7 +88,7 @@ export async function onRequestGet(context) {
     );
   }
 
-  // Translate legacy Alpha Vantage symbols to Yahoo Finance symbols
+  // Translate legacy database symbols to Yahoo Finance symbols
   function translateSymbol(sym) {
     let s = sym.toUpperCase();
     if (s.endsWith('.HKG')) return s.replace('.HKG', '.HK');

@@ -8,7 +8,7 @@ import { navigate } from '../router/index.js';
 import { getExchangeRates } from '../services/exchangeRate.js';
 
 /**
- * Alpha Vantage region → 内部 market ID 映射
+ * Yahoo Finance exchDisp/region → 内部 market ID 映射
  */
 const REGION_TO_MARKET = {
   'united states':  'US',
@@ -30,7 +30,7 @@ const REGION_TO_MARKET = {
 };
 
 /**
- * 根据 Alpha Vantage 的 region 字段推断内部市场 ID
+ * 根据 Yahoo Finance 的 exchDisp 或 region 字段推断内部市场 ID
  * @param {string} region
  * @param {string} symbol
  * @returns {string} market ID
