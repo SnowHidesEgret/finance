@@ -1,8 +1,5 @@
 /* src/styles/dashboard.css */
 
-/* === Financial Monospace Font === */
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
-
 .dashboard {
   display: flex;
   flex-direction: column;
@@ -83,6 +80,7 @@
   font-weight: 700;
   letter-spacing: -0.5px;
   line-height: 1.2;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
 }
@@ -90,6 +88,7 @@
 .kpi-card__sub {
   font-size: 0.875rem;
   font-weight: 500;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
 }
 

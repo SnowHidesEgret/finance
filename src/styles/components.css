@@ -164,7 +164,11 @@
 .exchange-rate-bar { display: flex; justify-content: space-between; align-items: center; padding: 0 var(--space-4); height: 100%; font-size: 0.75rem; color: var(--color-text-secondary); }
 .exchange-rate-bar__rates { display: flex; gap: var(--space-3); align-items: center; }
 .exchange-rate-bar__divider { color: var(--color-border); }
-.exchange-rate-bar__value { color: var(--color-text-primary); font-family: monospace; }
+.exchange-rate-bar__value {
+  color: var(--color-text-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
 .exchange-rate-bar__meta { display: flex; gap: var(--space-3); align-items: center; }
 
 /* Table */
@@ -186,8 +190,16 @@
   z-index: 1;
 }
 .table__td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); }
-.table__th--right, .table__td--right { text-align: right; }
-.table__td--mono { font-family: monospace; font-variant-numeric: tabular-nums; }
+.table__th--right { text-align: right; }
+.table__td--right {
+  text-align: right;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.table__td--mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
 .table__row--hoverable:hover { background: rgba(99, 102, 241, 0.05); transition: background 0.15s ease; }
 .table__row--hoverable:hover .table__td { color: var(--color-text-primary); }
 .table__stock-primary { font-weight: 600; }
@@ -200,12 +212,14 @@
 .table__td--profit {
   color: var(--color-profit);
   font-weight: 600;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
 }
 .table__td--profit::before { content: '▲ '; font-size: 0.65em; vertical-align: middle; opacity: 0.8; }
 .table__td--loss {
   color: var(--color-loss);
   font-weight: 600;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
 }
 .table__td--loss::before { content: '▼ '; font-size: 0.65em; vertical-align: middle; opacity: 0.8; }
@@ -281,7 +295,7 @@
   background: rgba(99, 102, 241, 0.12);
 }
 .autocomplete__item-symbol {
-  font-family: 'Fira Code', 'SF Mono', monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-weight: 600;
   font-size: 0.875rem;
   color: var(--color-accent-light);
@@ -310,7 +324,7 @@
   font-size: 0.6875rem;
 }
 .autocomplete__item-currency {
-  font-family: monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.6875rem;
   color: var(--color-text-secondary);
 }
