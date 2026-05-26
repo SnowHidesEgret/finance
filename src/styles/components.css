@@ -215,6 +215,7 @@
   font-weight: 600;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .table__td--profit::before { content: '▲ '; font-size: 0.65em; vertical-align: middle; opacity: 0.8; }
 .table__td--loss {
@@ -222,6 +223,7 @@
   font-weight: 600;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .table__td--loss::before { content: '▼ '; font-size: 0.65em; vertical-align: middle; opacity: 0.8; }
 
