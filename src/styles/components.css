@@ -235,6 +235,7 @@
   letter-spacing: 0.03em;
   text-transform: uppercase;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 .tag--a_share { background: rgba(239,68,68,0.12);    color: #fca5a5; border-color: rgba(239,68,68,0.25); }
 .tag--hk      { background: rgba(59,130,246,0.12);   color: #93c5fd; border-color: rgba(59,130,246,0.25); }
