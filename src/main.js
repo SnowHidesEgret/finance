@@ -18,11 +18,30 @@ import { renderSidebar } from './components/Sidebar.js';
 import { renderExchangeRateBar } from './components/ExchangeRateBar.js';
 import { createIcons, icons } from 'lucide';
 
-// Auto-replace lucide icons in the DOM
+// Auto-replace lucide icons in the DOM safely
+let lucideTimeout;
 const observer = new MutationObserver(() => {
-  createIcons({ icons });
+  clearTimeout(lucideTimeout);
+  lucideTimeout = setTimeout(() => {
+    observer.disconnect();
+    createIcons({ icons, nameAttr: 'data-lucide' });
+    if (document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  }, 20);
 });
-observer.observe(document.body, { childList: true, subtree: true });
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    observer.observe(document.body, { childList: true, subtree: true });
+    createIcons({ icons, nameAttr: 'data-lucide' });
+  });
+} else {
+  if (document.body) {
+    observer.observe(document.body, { childList: true, subtree: true });
+    createIcons({ icons, nameAttr: 'data-lucide' });
+  }
+}
 
 // 页面模块 — 延迟导入
 const pageModules = {
