@@ -117,11 +117,10 @@ export async function renderDashboardPage(container) {
                 <th class="table__th table__th--right dashboard-sortable" data-sort="pnl" style="cursor:pointer; user-select:none;" title="点击按盈亏排序">盈亏(¥) <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right">盈亏%</th>
                 <th class="table__th table__th--right dashboard-sortable" data-sort="weight" style="cursor:pointer; user-select:none;" title="点击按占比排序">占比 <span class="sort-icon">↓</span></th>
-                <th class="table__th table__th--right">Beta</th>
               </tr>
             </thead>
             <tbody id="positions-tbody">
-              <tr><td colspan="11" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="10" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -438,7 +437,7 @@ function updatePositionTable(positions, rates) {
   if (!cachedPositions || cachedPositions.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="11" class="table__empty">
+        <td colspan="10" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无持仓</p>
@@ -478,7 +477,6 @@ function updatePositionTable(positions, rates) {
     const pnl = pos.pnlCNY || pos.pnl_cny || 0;
     const pnlPct = pos.pnlPercent || pos.pnl_percent || 0;
     const weight = pos.weight || 0;
-    const beta = pos.beta != null ? pos.beta.toFixed(2) : '--';
     const marketValueCNY = pos.marketValueCNY || pos.valueCNY || 0;
     const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
     const hasLive = pos.hasLivePrice;
@@ -507,7 +505,6 @@ function updatePositionTable(positions, rates) {
           ${formatPercent(pnlPct)}
         </td>
         <td class="table__td table__td--right">${weight.toFixed(1)}%</td>
-        <td class="table__td table__td--right table__td--mono">${beta}</td>
       </tr>
     `;
   }).join('');
@@ -631,7 +628,7 @@ function showEmptyState() {
   if (tbody) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="11" class="table__empty">
+        <td colspan="10" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon animate-float">📊</div>
             <h3 class="empty-state__title">开始您的投资之旅</h3>
