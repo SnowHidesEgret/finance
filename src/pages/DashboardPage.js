@@ -379,7 +379,7 @@ function renderMarketCard(marketId, data, totalValue = 0) {
       <div class="market-summary-card__header">
         <span class="market-summary-card__flag">${market.flag}</span>
         <span class="market-summary-card__name">${market.label}</span>
-        <span class="market-summary-card__count">${count} 只</span>
+        <span class="market-summary-card__count">${count} 笔</span>
       </div>
       
       <div class="market-summary-card__body">
@@ -707,7 +707,7 @@ function showDayPnLModal(positions) {
   overlay.innerHTML = `
     <div style="
       background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
-      border-radius:20px; padding:24px; width:90%; max-width:600px; 
+      border-radius:20px; padding:24px; width:max-content; min-width:60%; max-width:95vw; 
       box-shadow:var(--shadow-lg); max-height:80vh; display:flex; flex-direction:column;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
@@ -822,7 +822,7 @@ function showMarketPositionsModal(marketId, positions) {
   overlay.innerHTML = `
     <div style="
       background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
-      border-radius:20px; padding:24px; width:90%; max-width:600px; 
+      border-radius:20px; padding:24px; width:max-content; min-width:60%; max-width:95vw; 
       box-shadow:var(--shadow-lg); max-height:80vh; display:flex; flex-direction:column;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
