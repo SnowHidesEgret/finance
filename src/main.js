@@ -16,6 +16,13 @@ import { settingsStore } from './store/index.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar } from './components/Sidebar.js';
 import { renderExchangeRateBar } from './components/ExchangeRateBar.js';
+import { createIcons, icons } from 'lucide';
+
+// Auto-replace lucide icons in the DOM
+const observer = new MutationObserver(() => {
+  createIcons({ icons });
+});
+observer.observe(document.body, { childList: true, subtree: true });
 
 // 页面模块 — 延迟导入
 const pageModules = {

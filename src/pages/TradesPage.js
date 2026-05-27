@@ -101,7 +101,7 @@ async function loadTrades() {
       tbody.innerHTML = `
         <tr><td colspan="8" class="table__empty">
           <div class="empty-state">
-            <div class="empty-state__icon">📭</div>
+            <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无交易记录</p>
           </div>
         </td></tr>`;

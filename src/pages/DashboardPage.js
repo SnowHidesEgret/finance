@@ -63,7 +63,7 @@ export async function renderDashboardPage(container) {
       <!-- 各国市场概览 -->
       <section class="dashboard__section animate-fade-in-up delay-2">
         <h2 class="dashboard__section-title">
-          <span class="dashboard__section-icon">🌍</span>
+          <span class="dashboard__section-icon"><i data-lucide="globe"></i></span>
           各国市场概览
         </h2>
         <div class="dashboard__market-overview" id="market-overview">
@@ -74,7 +74,7 @@ export async function renderDashboardPage(container) {
       <!-- 图表区 -->
       <section class="dashboard__section animate-fade-in-up delay-3">
         <h2 class="dashboard__section-title">
-          <span class="dashboard__section-icon">📈</span>
+          <span class="dashboard__section-icon"><i data-lucide="line-chart"></i></span>
           投资组合分析
         </h2>
         <div class="dashboard__charts-row">
@@ -100,7 +100,7 @@ export async function renderDashboardPage(container) {
       <!-- 持仓速览表 -->
       <section class="dashboard__section animate-fade-in-up delay-4">
         <h2 class="dashboard__section-title">
-          <span class="dashboard__section-icon">📋</span>
+          <span class="dashboard__section-icon"><i data-lucide="list"></i></span>
           持仓明细
         </h2>
         <div class="table-wrapper" id="positions-table-wrapper">
@@ -421,7 +421,7 @@ function updatePositionTable(positions, rates) {
       <tr>
         <td colspan="11" class="table__empty">
           <div class="empty-state">
-            <div class="empty-state__icon">📭</div>
+            <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无持仓</p>
             <a href="#/trade" class="btn btn--primary btn--sm">录入第一笔交易</a>
           </div>
@@ -663,8 +663,8 @@ function showDayPnLModal(positions) {
 
         const isOpen = isMarketOpen(pos.market);
         const statusIndicator = isOpen 
-          ? `<span style="color:#10b981; font-size:0.875rem;" title="开盘中">🟢</span>` 
-          : `<span style="color:#64748b; font-size:0.875rem;" title="休市">⚪</span>`;
+          ? `<span style="color:#10b981; display:inline-flex; align-items:center;" title="开盘中"><i data-lucide="activity" style="width:14px; height:14px;"></i></span>` 
+          : `<span style="color:#64748b; display:inline-flex; align-items:center;" title="休市"><i data-lucide="moon" style="width:14px; height:14px;"></i></span>`;
 
         return `
           <tr class="table__row table__row--hoverable">

@@ -50,7 +50,7 @@ function showDeleteModal(pos, onConfirm) {
       background:var(--color-surface,#1e1e2e);border:1px solid var(--color-border,#374151);
       border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);
     ">
-      <div style="font-size:2rem;text-align:center;margin-bottom:16px;">🗑️</div>
+      <div style="display:flex; justify-content:center; margin-bottom:16px; color:#ef4444;"><i data-lucide="trash-2" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
       <h3 style="margin:0 0 8px;text-align:center;font-size:1.1rem;">确认删除持仓</h3>
       <p style="margin:0 0 24px;text-align:center;color:var(--color-text-secondary,#9ca3af);font-size:0.9rem;">
         将永久删除 <strong style="color:var(--color-text-primary)">${pos.name}</strong>（${pos.symbol}）的持仓记录，此操作不可撤销。
@@ -95,7 +95,7 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
       background:var(--color-surface,#1e1e2e);border:1px solid var(--color-border,#374151);
       border-radius:16px;padding:32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.5);
     ">
-      <div style="font-size:2rem;text-align:center;margin-bottom:16px;">🛑</div>
+      <div style="display:flex; justify-content:center; margin-bottom:16px; color:#f59e0b;"><i data-lucide="x-octagon" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
       <h3 style="margin:0 0 8px;text-align:center;font-size:1.1rem;">平仓确认</h3>
       <p style="margin:0 0 24px;text-align:center;color:var(--color-text-secondary,#9ca3af);font-size:0.9rem;">
         卖出 <strong style="color:var(--color-text-primary)">${pos.name}</strong>（${pos.symbol}）
@@ -255,7 +255,7 @@ async function loadPositions() {
       tbody.innerHTML = `
         <tr><td colspan="11" class="table__empty">
           <div class="empty-state">
-            <div class="empty-state__icon">📭</div>
+            <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无数据</p>
             <a href="#/trade" class="btn btn--primary btn--sm">录入第一笔交易</a>
           </div>

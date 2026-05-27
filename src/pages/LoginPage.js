@@ -18,7 +18,7 @@ export async function renderLoginPage(container) {
         border: 1px solid rgba(255, 255, 255, 0.15);
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
       ">
-        <div style="font-size: 64px; margin-bottom: 16px; text-shadow: 0 0 20px rgba(250, 204, 21, 0.5);">✨</div>
+        <div style="margin-bottom: 16px;"><i data-lucide="sparkles" style="width: 64px; height: 64px; color: #fbbf24; filter: drop-shadow(0 0 20px rgba(250, 204, 21, 0.5)); stroke-width: 1.5;"></i></div>
         <h2 style="margin-bottom: 12px; font-size: 2.25rem; font-weight: 700; background: linear-gradient(to right, #fbbf24, #f59e0b); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">混乱是阶梯</h2>
         <p style="color: rgba(255, 255, 255, 0.9); margin-bottom: 32px; font-size: 1.25rem;" id="login-hint">芝麻开门：请输入开启宝库的密语</p>
         
