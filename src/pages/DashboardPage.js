@@ -173,6 +173,18 @@ export async function renderDashboardPage(container) {
     });
   }
   
+  // 绑定市场概览点击事件
+  const marketOverview = container.querySelector('#market-overview');
+  if (marketOverview) {
+    marketOverview.addEventListener('click', (e) => {
+      const card = e.target.closest('.market-summary-card');
+      if (card) {
+        const marketId = card.dataset.market;
+        showMarketPositionsModal(marketId, cachedPositions);
+      }
+    });
+  }
+  
   // 监听刷新事件
   const refreshHandler = () => loadDashboardData(container);
   window.addEventListener('stockvault:refresh', refreshHandler);
@@ -270,6 +282,13 @@ function updateKPICards(data) {
     dayPnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(dayPnl)}`;
   }
   
+  const dayPnlPercent = data.dayPnlPercent || data.totalDayPnLPercent || (totalValue - dayPnl > 0 ? (dayPnl / (totalValue - dayPnl)) * 100 : 0);
+  const dayPnlPctEl = document.getElementById('val-day-pnl-pct');
+  if (dayPnlPctEl) {
+    dayPnlPctEl.textContent = formatPercent(dayPnlPercent);
+    dayPnlPctEl.className = `kpi-card__sub kpi-card__sub--${getPnLClass(dayPnlPercent)}`;
+  }
+  
   animateValue('val-total-cost', totalCost, v => formatCurrency(v));
   
   const countEl = document.getElementById('val-position-count');
@@ -357,7 +376,7 @@ function renderMarketCard(marketId, data, totalValue = 0) {
   const sparklineSVG = generateSparklineSVG(pnlPct, marketId);
   
   return `
-    <div class="market-summary-card market-summary-card--${marketId.toLowerCase()}" data-market="${marketId}">
+    <div class="market-summary-card market-summary-card--${marketId.toLowerCase()}" data-market="${marketId}" style="cursor:pointer;" title="点击查看持仓明细">
       <div class="market-summary-card__header">
         <span class="market-summary-card__flag">${market.flag}</span>
         <span class="market-summary-card__name">${market.label}</span>
@@ -725,4 +744,102 @@ function showDayPnLModal(positions) {
   overlay.querySelector('#close-day-pnl').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
+
+/**
+ * 显示市场持仓明细弹窗
+ */
+function showMarketPositionsModal(marketId, positions) {
+  document.getElementById('market-positions-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'market-positions-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
+
+  const market = MARKETS[marketId] || {};
+  const marketPositions = positions.filter(p => (p.status === 'OPEN' || !p.status) && p.market === marketId);
+  
+  const sorted = [...marketPositions].sort((a, b) => {
+    const valA = a.marketValueOriginal || (a.currentPrice || a.current_price || a.open_price) * a.quantity;
+    const valB = b.marketValueOriginal || (b.currentPrice || b.current_price || b.open_price) * b.quantity;
+    return valB - valA; // desc
+  });
+
+  const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+  function fmtNative(amount, currency) {
+    const sym = CURRENCY_SYMBOL[currency] || '';
+    return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  const rowsHtml = sorted.length === 0 
+    ? `<tr><td colspan="4" class="table__empty">暂无持仓</td></tr>`
+    : sorted.map(pos => {
+        const currency = pos.currency || market.currency || 'CNY';
+        const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
+        const marketValue = pos.marketValueOriginal || currentPrice * pos.quantity;
+
+        const isOpen = isMarketOpen(pos.market);
+        const statusIndicator = isOpen 
+          ? `<span style="color:#10b981; display:inline-flex; align-items:center;" title="开盘中"><i data-lucide="activity" style="width:14px; height:14px;"></i></span>` 
+          : `<span style="color:#64748b; display:inline-flex; align-items:center;" title="休市"><i data-lucide="moon" style="width:14px; height:14px;"></i></span>`;
+
+        return `
+          <tr class="table__row table__row--hoverable">
+            <td class="table__td">
+              <div style="font-weight:600">${pos.name}</div>
+              <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
+            </td>
+            <td class="table__td" style="text-align: center;">
+              ${statusIndicator}
+            </td>
+            <td class="table__td table__td--right table__td--mono">
+              ${formatQuantity(pos.quantity)}
+            </td>
+            <td class="table__td table__td--right table__td--mono">
+              ${fmtNative(marketValue, currency)}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:90%; max-width:600px; 
+      box-shadow:var(--shadow-lg); max-height:80vh; display:flex; flex-direction:column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+          ${market.flag || ''} ${market.label || marketId} 持仓列表
+        </h3>
+        <button id="close-market-positions" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+      </div>
+      
+      <div class="table-wrapper" style="flex:1; overflow-y:auto; border-radius:12px;">
+        <table class="table" style="width:100%;">
+          <thead style="position:sticky; top:0; background:var(--color-bg-card); z-index:10;">
+            <tr>
+              <th class="table__th">股票</th>
+              <th class="table__th" style="text-align:center;">状态</th>
+              <th class="table__th table__th--right">持仓数量</th>
+              <th class="table__th table__th--right">持仓金额</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-market-positions').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
 
