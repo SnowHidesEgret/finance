@@ -784,6 +784,8 @@ function showMarketPositionsModal(marketId, positions) {
           : `<span style="color:#64748b; display:inline-flex; align-items:center;" title="休市"><i data-lucide="moon" style="width:14px; height:14px;"></i></span>`;
 
         const dayPnl = pos.dayPnLCNY || pos.day_pnl_cny || 0;
+        const rateToCNY = pos.currentRate || 1;
+        const dayPnlNative = dayPnl / rateToCNY;
         const totalPnlPct = pos.pnlPercent || pos.pnl_percent || 0;
         const marketValueCNY = pos.marketValueCNY || pos.valueCNY || 0;
         const prevValueCNY = marketValueCNY - dayPnl;
@@ -804,8 +806,8 @@ function showMarketPositionsModal(marketId, positions) {
             <td class="table__td table__td--right table__td--mono">
               ${fmtNative(marketValue, currency)}
             </td>
-            <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(dayPnl)}">
-              ${formatCurrency(dayPnl, 'CNY', true)}
+            <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(dayPnlNative)}">
+              ${fmtNative(dayPnlNative, currency)}
             </td>
             <td class="table__td table__td--right table__td--${getPnLClass(dayPnlPct)}">
               ${formatPercent(dayPnlPct)}
@@ -838,7 +840,7 @@ function showMarketPositionsModal(marketId, positions) {
               <th class="table__th" style="text-align:center;">状态</th>
               <th class="table__th table__th--right">持仓数量</th>
               <th class="table__th table__th--right">持仓金额</th>
-              <th class="table__th table__th--right">今日盈亏(¥)</th>
+              <th class="table__th table__th--right">今日盈亏</th>
               <th class="table__th table__th--right">今日盈亏%</th>
               <th class="table__th table__th--right">总盈亏%</th>
             </tr>
