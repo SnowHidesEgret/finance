@@ -19,21 +19,35 @@ export function renderHeader(container) {
             <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
-        <div class="header__brand" role="button" tabindex="0">
+        <div class="header__brand" role="button" tabindex="0" style="display: flex; align-items: center; gap: 10px;">
           <div class="header__logo">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
               <defs>
-                <linearGradient id="hg" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#6366f1"/>
-                  <stop offset="100%" stop-color="#8b5cf6"/>
+                <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#f59e0b"/>
+                  <stop offset="50%" stop-color="#fbbf24"/>
+                  <stop offset="100%" stop-color="#fef08a"/>
                 </linearGradient>
+                <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
               </defs>
-              <rect width="32" height="32" rx="8" fill="url(#hg)"/>
-              <path d="M8 22 L12 16 L16 19 L20 11 L24 14" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-              <circle cx="24" cy="14" r="2" fill="white"/>
+              <!-- Hexagon Base -->
+              <polygon points="16,2 30,9.5 30,22.5 16,30 2,22.5 2,9.5" fill="rgba(245, 158, 11, 0.1)" stroke="url(#goldGrad)" stroke-width="1.5" filter="url(#goldGlow)"/>
+              <!-- Chaos / Stairs path -->
+              <path d="M8 22 h4 v-5 h4 v-6 h5 l3 -4" stroke="url(#goldGrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="24" cy="7" r="1.5" fill="#fef08a" filter="url(#goldGlow)"/>
             </svg>
           </div>
-          <h1 class="header__title">混乱是阶梯</h1>
+          <h1 class="header__title" style="
+            background: linear-gradient(to right, #f59e0b, #fbbf24, #fef08a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 15px rgba(251, 191, 36, 0.2);
+          ">混乱是阶梯</h1>
         </div>
       </div>
       <div class="header__center">
