@@ -249,6 +249,7 @@
 .form-group { margin-bottom: var(--space-4); }
 .form-label { display: block; margin-bottom: var(--space-2); font-size: 0.875rem; color: var(--color-text-secondary); }
 .input, .select, .textarea { width: 100%; background: rgba(0,0,0,0.2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 8px 12px; color: var(--color-text-primary); transition: var(--transition-fast); }
+.select option { background: var(--color-bg-primary); color: var(--color-text-primary); }
 .input::placeholder, .textarea::placeholder { color: var(--color-text-muted); opacity: 0.6; }
 .input:focus, .select:focus, .textarea:focus {
   outline: none;
