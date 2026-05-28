@@ -2,7 +2,7 @@
  * StockVault — 交易记录页
  */
 
-import { formatQuantity } from '../utils/format.js';
+import { formatQuantity, getPnLClass } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get } from '../services/api.js';
 
@@ -10,9 +10,11 @@ import { get } from '../services/api.js';
 const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
 
 /** 格式化本币金额 */
-function fmtNative(amount, currency) {
+function fmtNative(amount, currency, showSign = false) {
   const sym = CURRENCY_SYMBOL[currency] || '';
-  return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const num = Number(amount);
+  const sign = showSign && num > 0 ? '+' : '';
+  return `${sign}${sym}${num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export async function renderTradesPage(container) {
@@ -57,10 +59,11 @@ export async function renderTradesPage(container) {
                 <th class="table__th table__th--right">数量</th>
                 <th class="table__th table__th--right">总金额</th>
                 <th class="table__th table__th--right">手续费</th>
+                <th class="table__th table__th--right">实现盈亏</th>
               </tr>
             </thead>
             <tbody id="trades-tbody">
-              <tr><td colspan="8" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="9" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -119,6 +122,11 @@ async function loadTrades() {
 
       const totalValue = trade.price * trade.quantity;
 
+      let pnlDisplay = '--';
+      if (!isBuy && trade.realized_pnl != null) {
+        pnlDisplay = `<span class="table__td--${getPnLClass(trade.realized_pnl)}">${fmtNative(trade.realized_pnl, currency, true)}</span>`;
+      }
+
       return `
         <tr class="table__row table__row--hoverable">
           <td class="table__td table__td--mono">${trade.trade_date}</td>
@@ -138,6 +146,7 @@ async function loadTrades() {
           <td class="table__td table__td--right">${formatQuantity(trade.quantity)}</td>
           <td class="table__td table__td--right table__td--mono">${fmtNative(totalValue, currency)}</td>
           <td class="table__td table__td--right table__td--mono">${fmtNative(trade.commission, currency)}</td>
+          <td class="table__td table__td--right table__td--mono">${pnlDisplay}</td>
         </tr>
       `;
     }).join('');

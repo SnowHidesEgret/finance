@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS trades (
   rate_to_cny   REAL NOT NULL DEFAULT 1.0,
   trade_date    TEXT NOT NULL,                        -- ISO-8601 date
   notes         TEXT,
+  realized_pnl  REAL,                                 -- realized PnL in native currency (for SELL)
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   FOREIGN KEY (position_id) REFERENCES positions (id) ON DELETE SET NULL
 );

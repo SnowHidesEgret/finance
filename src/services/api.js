@@ -33,7 +33,18 @@ async function request(endpoint, options = {}) {
       throw new ApiError('未授权，请登录', 401, null);
     }
     
-    const data = await response.json();
+    let data;
+    const text = await response.text();
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        throw new ApiError('服务器响应异常 (非JSON格式)。请检查本地后端服务 (Wrangler) 是否已启动。', response.status, { raw: text });
+      }
+    } else {
+      data = {};
+    }
+    
     
     if (!response.ok) {
       throw new ApiError(

@@ -50,13 +50,20 @@ export function renderHeader(container) {
           ">混乱是阶梯</h1>
         </div>
       </div>
-      <div class="header__center">
-        <div class="header__status" id="header-status">
+      
+      <div class="header__center" style="flex: 1; justify-content: flex-end; padding-right: 24px;">
+        <div class="header__marquee-wrapper" id="global-marquee-wrapper" style="overflow: hidden; display: flex; align-items: center; max-width: 500px; width: 100%;">
+          <div class="header__marquee-content" id="index-marquee" style="display: flex; gap: 32px; animation: marquee-scroll 25s linear infinite;">
+            <!-- Data will be loaded here -->
+          </div>
+        </div>
+      </div>
+      
+      <div class="header__right">
+        <div class="header__status" id="header-status" style="white-space: nowrap;">
           <span class="header__status-dot animate-pulse"></span>
           <span class="header__status-text">就绪</span>
         </div>
-      </div>
-      <div class="header__right">
         <button class="btn btn--ghost btn--icon" id="btn-refresh" title="刷新行情">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"></polyline>
@@ -93,6 +100,81 @@ export function renderHeader(container) {
     updateStatus('刷新中...', true);
     setTimeout(() => updateStatus('就绪', false), 3000);
   });
+
+  // Load marquee data
+  loadIndexMarqueeData();
+  
+  // Add pause/resume animation on hover
+  const marqueeWrapper = container.querySelector('#global-marquee-wrapper');
+  const marqueeContent = container.querySelector('#index-marquee');
+  if (marqueeWrapper && marqueeContent) {
+    marqueeWrapper.addEventListener('mouseenter', () => marqueeContent.style.animationPlayState = 'paused');
+    marqueeWrapper.addEventListener('mouseleave', () => marqueeContent.style.animationPlayState = 'running');
+  }
+}
+
+/**
+ * 加载并渲染指数跑马灯数据
+ */
+import { getQuotes } from '../services/stockApi.js';
+import { formatNumber, formatPercent, getPnLClass } from '../utils/format.js';
+
+export async function loadIndexMarqueeData() {
+  const marquee = document.getElementById('index-marquee');
+  if (!marquee) return;
+
+  const INDICES = [
+    { symbol: '^GSPC', name: '标普500' },
+    { symbol: '^IXIC', name: '纳斯达克' },
+    { symbol: '000300.SS', name: '沪深300' },
+    { symbol: '^HSI', name: '恒生指数' }
+  ];
+
+  try {
+    const symbols = INDICES.map(idx => idx.symbol);
+    const quotes = await getQuotes(symbols);
+    
+    let html = '';
+    
+    // 生成两组以便实现无缝滚动
+    for (let loop = 0; loop < 2; loop++) {
+      for (const idx of INDICES) {
+        const quote = quotes.get(idx.symbol);
+        
+        if (quote) {
+          const currentPrice = quote.current_price || quote.currentPrice || quote.price || 0;
+          const changePct = quote.change_percent || quote.changePercent || 0;
+          
+          const changeClass = getPnLClass(changePct);
+          const arrow = changePct > 0 ? '↑' : changePct < 0 ? '↓' : '';
+          const absPct = Math.abs(changePct);
+          
+          html += `
+            <div class="marquee-item" style="display: flex; align-items: center; gap: 8px; font-size: 0.875rem; white-space: nowrap;">
+              <span class="marquee-item__name" style="color: var(--color-text-secondary);">${idx.name}</span>
+              <span class="marquee-item__price ${changeClass}">${formatNumber(currentPrice)}</span>
+              <span class="marquee-item__change ${changeClass}">
+                ${arrow} ${formatPercent(absPct, false)}
+              </span>
+            </div>
+          `;
+        } else {
+          // 备用展示
+          html += `
+            <div class="marquee-item" style="display: flex; align-items: center; gap: 8px; font-size: 0.875rem; white-space: nowrap;">
+              <span class="marquee-item__name" style="color: var(--color-text-secondary);">${idx.name}</span>
+              <span class="marquee-item__price">---</span>
+            </div>
+          `;
+        }
+      }
+    }
+    
+    marquee.innerHTML = html;
+    
+  } catch (err) {
+    console.error('[Header] Failed to load index data', err);
+  }
 }
 
 /**

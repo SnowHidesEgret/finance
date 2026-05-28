@@ -122,30 +122,75 @@ export async function onRequestPost(context) {
   const id = generateId();
   const tradeId = generateId();
   const now = new Date().toISOString();
+  const symbolUpper = String(body.symbol).toUpperCase();
 
-  const posStmt = env.DB.prepare(
-    `INSERT INTO positions
-       (id, symbol, name, market, currency, open_date, open_price, open_rate_to_cny,
-        quantity, commission, status, sector, beta, notes, tags, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'OPEN', ?11, ?12, ?13, ?14, ?15, ?16)`
-  ).bind(
-    id,
-    String(body.symbol).toUpperCase(),
-    body.name,
-    market,
-    body.currency ?? 'CNY',
-    body.open_date,
-    Number(body.open_price),
-    Number(body.open_rate_to_cny ?? 1),
-    Number(body.quantity),
-    Number(body.commission ?? 0),
-    body.sector ?? null,
-    body.beta != null ? Number(body.beta) : null,
-    body.notes ?? null,
-    body.tags ?? null,
-    now,
-    now,
-  );
+  // Check if there is an existing OPEN position for this symbol
+  const existing = await env.DB.prepare('SELECT * FROM positions WHERE symbol = ?1 AND status = \'OPEN\'')
+    .bind(symbolUpper)
+    .first();
+
+  let posStmt;
+  let targetPositionId;
+
+  if (existing) {
+    targetPositionId = existing.id;
+    const oldQty = existing.quantity;
+    const oldPrice = existing.open_price;
+    const oldRate = existing.open_rate_to_cny || 1;
+    const newQty = Number(body.quantity);
+    const newPrice = Number(body.open_price);
+    const newRate = Number(body.open_rate_to_cny ?? 1);
+    
+    const totalQty = oldQty + newQty;
+    const oldCostNative = oldQty * oldPrice;
+    const newCostNative = newQty * newPrice;
+    const totalCostNative = oldCostNative + newCostNative;
+    const avgPrice = totalCostNative / totalQty;
+    
+    const oldCostCNY = oldCostNative * oldRate;
+    const newCostCNY = newCostNative * newRate;
+    const avgRateToCNY = (oldCostCNY + newCostCNY) / totalCostNative;
+    
+    const totalCommission = (existing.commission || 0) + Number(body.commission ?? 0);
+
+    posStmt = env.DB.prepare(
+      `UPDATE positions 
+       SET quantity = ?1, open_price = ?2, open_rate_to_cny = ?3, commission = ?4, updated_at = ?5
+       WHERE id = ?6`
+    ).bind(
+      totalQty,
+      avgPrice,
+      avgRateToCNY,
+      totalCommission,
+      now,
+      targetPositionId
+    );
+  } else {
+    targetPositionId = id;
+    posStmt = env.DB.prepare(
+      `INSERT INTO positions
+         (id, symbol, name, market, currency, open_date, open_price, open_rate_to_cny,
+          quantity, commission, status, sector, beta, notes, tags, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'OPEN', ?11, ?12, ?13, ?14, ?15, ?16)`
+    ).bind(
+      targetPositionId,
+      symbolUpper,
+      body.name,
+      market,
+      body.currency ?? 'CNY',
+      body.open_date,
+      Number(body.open_price),
+      Number(body.open_rate_to_cny ?? 1),
+      Number(body.quantity),
+      Number(body.commission ?? 0),
+      body.sector ?? null,
+      body.beta != null ? Number(body.beta) : null,
+      body.notes ?? null,
+      body.tags ?? null,
+      now,
+      now
+    );
+  }
 
   const tradeStmt = env.DB.prepare(
     `INSERT INTO trades
@@ -154,8 +199,8 @@ export async function onRequestPost(context) {
      VALUES (?1, ?2, ?3, ?4, ?5, 'BUY', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
   ).bind(
     tradeId,
-    id,
-    String(body.symbol).toUpperCase(),
+    targetPositionId,
+    symbolUpper,
     body.name,
     market,
     Number(body.open_price),
@@ -165,18 +210,18 @@ export async function onRequestPost(context) {
     Number(body.open_rate_to_cny ?? 1),
     body.open_date,
     body.notes ?? null,
-    now,
+    now
   );
 
   await env.DB.batch([posStmt, tradeStmt]);
 
-  // Return the newly created position
-  const created = await env.DB.prepare('SELECT * FROM positions WHERE id = ?1')
-    .bind(id)
+  // Return the newly created/updated position
+  const resultingPosition = await env.DB.prepare('SELECT * FROM positions WHERE id = ?1')
+    .bind(targetPositionId)
     .first();
 
   return Response.json(
-    { success: true, data: created },
-    { status: 201 },
+    { success: true, data: resultingPosition },
+    { status: existing ? 200 : 201 }
   );
 }

@@ -125,32 +125,116 @@ export async function onRequestPut(context) {
         { status: 400 },
       );
     }
+    
+    const closeQty = Number(body.close_quantity || existing.quantity);
+    if (closeQty <= 0 || closeQty > existing.quantity) {
+      return Response.json({ success: false, error: 'Invalid close quantity' }, { status: 400 });
+    }
+    
+    const isFullClose = closeQty === existing.quantity;
 
     const tradeId = generateId();
     const now = new Date().toISOString();
 
-    const updatePosStmt = env.DB.prepare(
-      `UPDATE positions
-       SET status = 'CLOSED',
-           close_date         = ?1,
-           close_price        = ?2,
-           close_rate_to_cny  = ?3,
-           close_commission   = ?4,
-           updated_at         = datetime('now')
-       WHERE id = ?5`
-    ).bind(
-      body.close_date,
-      Number(body.close_price),
-      Number(body.close_rate_to_cny ?? 1),
-      Number(body.close_commission ?? 0),
-      id,
-    );
+    // -- FIFO Cost Basis Calculation --
+    // Fetch all existing trades for this position
+    const { results: existingTrades } = await env.DB.prepare(
+      'SELECT trade_type, quantity, price, rate_to_cny FROM trades WHERE position_id = ?1 ORDER BY trade_date ASC, created_at ASC'
+    ).bind(id).all();
+
+    let priorSold = 0;
+    const buyTrades = [];
+    
+    for (const t of (existingTrades || [])) {
+      if (t.trade_type === 'SELL') {
+        priorSold += t.quantity;
+      } else if (t.trade_type === 'BUY') {
+        buyTrades.push(t);
+      }
+    }
+
+    let remainingCostNative = 0;
+    let remainingCostCNY = 0;
+    let remainingQty = 0;
+    
+    let costOfCurrentSellNative = 0;
+    let currentSellUnfulfilled = closeQty;
+    let priorSoldTracker = priorSold;
+
+    for (const b of buyTrades) {
+      let bQty = b.quantity;
+      
+      // Step 1: consume priorSold
+      if (priorSoldTracker > 0) {
+        if (priorSoldTracker >= bQty) {
+          priorSoldTracker -= bQty;
+          continue; // this buy lot is completely gone
+        } else {
+          bQty -= priorSoldTracker;
+          priorSoldTracker = 0;
+        }
+      }
+      
+      // Step 2: consume current sell
+      if (currentSellUnfulfilled > 0) {
+        if (bQty <= currentSellUnfulfilled) {
+          costOfCurrentSellNative += bQty * b.price;
+          currentSellUnfulfilled -= bQty;
+          continue; // this buy lot is completely consumed by current sell
+        } else {
+          costOfCurrentSellNative += currentSellUnfulfilled * b.price;
+          bQty -= currentSellUnfulfilled;
+          currentSellUnfulfilled = 0;
+        }
+      }
+      
+      // Step 3: whatever is left belongs to remainingQty
+      remainingQty += bQty;
+      remainingCostNative += bQty * b.price;
+      remainingCostCNY += bQty * b.price * (b.rate_to_cny || 1);
+    }
+
+    const newOpenPrice = remainingQty > 0 ? remainingCostNative / remainingQty : existing.open_price;
+    const newRateToCNY = remainingCostNative > 0 ? remainingCostCNY / remainingCostNative : existing.open_rate_to_cny;
+    const newCommission = remainingQty > 0 ? (existing.commission || 0) * (remainingQty / existing.quantity) : 0;
+    
+    const realizedPnlNative = (closeQty * Number(body.close_price)) - costOfCurrentSellNative - Number(body.close_commission ?? 0);
+
+    let updatePosStmt;
+    if (isFullClose) {
+      updatePosStmt = env.DB.prepare(
+        `UPDATE positions
+         SET status = 'CLOSED',
+             close_date         = ?1,
+             close_price        = ?2,
+             close_rate_to_cny  = ?3,
+             close_commission   = ?4,
+             updated_at         = datetime('now')
+         WHERE id = ?5`
+      ).bind(
+        body.close_date,
+        Number(body.close_price),
+        Number(body.close_rate_to_cny ?? 1),
+        Number(body.close_commission ?? 0),
+        id,
+      );
+    } else {
+      updatePosStmt = env.DB.prepare(
+        `UPDATE positions
+         SET quantity = ?1,
+             open_price = ?2,
+             open_rate_to_cny = ?3,
+             commission = ?4,
+             updated_at = datetime('now')
+         WHERE id = ?5`
+      ).bind(remainingQty, newOpenPrice, newRateToCNY, newCommission, id);
+    }
 
     const insertTradeStmt = env.DB.prepare(
       `INSERT INTO trades
          (id, position_id, symbol, name, market, trade_type, price, quantity,
-          commission, currency, rate_to_cny, trade_date, notes, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, 'SELL', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`
+          commission, currency, rate_to_cny, trade_date, notes, realized_pnl, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, 'SELL', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
     ).bind(
       tradeId,
       id,
@@ -158,12 +242,13 @@ export async function onRequestPut(context) {
       existing.name,
       existing.market,
       Number(body.close_price),
-      existing.quantity,
+      closeQty,
       Number(body.close_commission ?? 0),
       existing.currency,
       Number(body.close_rate_to_cny ?? 1),
       body.close_date,
-      'Closed position',
+      isFullClose ? 'Closed position' : 'Partial close',
+      realizedPnlNative,
       now,
     );
 

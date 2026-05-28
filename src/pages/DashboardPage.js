@@ -7,6 +7,7 @@ import { formatCurrency, formatPercent, formatNumber, getPnLClass, formatQuantit
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get } from '../services/api.js';
 import { getExchangeRates } from '../services/exchangeRate.js';
+import { getQuotes } from '../services/stockApi.js';
 import { summaryStore, positionsStore, marketStore } from '../store/index.js';
 import { isMarketOpen } from '../utils/marketHours.js';
 
@@ -24,6 +25,7 @@ export async function renderDashboardPage(container) {
 
   container.innerHTML = `
     <div class="dashboard animate-fade-in-up">
+
       <!-- KPI 指标卡 -->
       <section class="dashboard__kpi-row">
         <div class="kpi-card kpi-card--total animate-fade-in-up delay-1" id="kpi-total-value">
@@ -858,5 +860,7 @@ function showMarketPositionsModal(marketId, positions) {
   overlay.querySelector('#close-market-positions').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
+
+
 
 

@@ -107,6 +107,11 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
       </div>
       
       <div style="margin-bottom: 16px;">
+        <label style="display:block;margin-bottom:8px;font-size:0.85rem;color:var(--color-text-secondary);">平仓数量 (最多 ${pos.quantity})</label>
+        <input type="number" id="close-quantity" class="input" value="${pos.quantity}" step="any" min="0.0001" max="${pos.quantity}" style="width:100%;">
+      </div>
+      
+      <div style="margin-bottom: 16px;">
         <label style="display:block;margin-bottom:8px;font-size:0.85rem;color:var(--color-text-secondary);">平仓价格 (${currency})</label>
         <input type="number" id="close-price" class="input" value="${currentPrice || ''}" step="0.001" min="0" style="width:100%;">
       </div>
@@ -132,9 +137,15 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
     const dateInput = overlay.querySelector('#close-date').value;
     const priceInput = overlay.querySelector('#close-price').value;
     const commissionInput = overlay.querySelector('#close-commission').value;
+    const quantityInput = overlay.querySelector('#close-quantity').value;
 
-    if (!dateInput || !priceInput) {
-      alert('请输入平仓日期和平仓价格');
+    if (!dateInput || !priceInput || !quantityInput) {
+      alert('请输入平仓日期、价格和数量');
+      return;
+    }
+    
+    if (parseFloat(quantityInput) > pos.quantity) {
+      alert(`平仓数量不能超过持仓总量 (${pos.quantity})`);
       return;
     }
 
@@ -145,7 +156,8 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
     await onConfirm({
       close_date: dateInput,
       close_price: parseFloat(priceInput),
-      close_commission: parseFloat(commissionInput) || 0
+      close_commission: parseFloat(commissionInput) || 0,
+      close_quantity: parseFloat(quantityInput)
     });
     
     overlay.remove();
@@ -335,7 +347,7 @@ async function loadPositions() {
             <div style="display:flex;gap:8px;justify-content:flex-end;">
               ${!isClosed ? `
               <button class="btn btn--sm btn--ghost btn-close-pos"
-                data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}" data-price="${currentPrice}" data-currency="${currency}"
+                data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}" data-quantity="${pos.quantity}" data-price="${currentPrice}" data-currency="${currency}"
                 title="平仓">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -378,8 +390,8 @@ async function loadPositions() {
     // 绑定平仓按钮事件
     tbody.querySelectorAll('.btn-close-pos').forEach(btn => {
       btn.addEventListener('click', () => {
-        const { id, name, symbol, price, currency } = btn.dataset;
-        showCloseModal({ id, name, symbol }, price, currency, async (closeData) => {
+        const { id, name, symbol, quantity, price, currency } = btn.dataset;
+        showCloseModal({ id, name, symbol, quantity }, price, currency, async (closeData) => {
           try {
             await put(`/api/positions/${id}`, {
               status: 'CLOSED',

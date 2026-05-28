@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cloudflare Wrangler & Database
+.wrangler/
+*.sqlite
+*.sqlite3
+*.sql
+remote_data.sql

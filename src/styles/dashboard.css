@@ -426,3 +426,92 @@
   .dashboard__kpi-row, .dashboard__market-overview { grid-template-columns: 1fr; }
   .market-summary-card__stat-value--primary { font-size: 1.4rem; }
 }
+/* ========================================
+   Marquee Component
+   ======================================== */
+
+.header__marquee-wrapper {
+  overflow: hidden;
+  background: var(--color-bg-card);
+  border: var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-4);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  position: relative;
+  backdrop-filter: var(--glass-blur);
+}
+
+.header__marquee-wrapper::before,
+.header__marquee-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 50px;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.header__marquee-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--color-bg-card) 0%, transparent 100%);
+}
+
+.header__marquee-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--color-bg-card) 0%, transparent 100%);
+}
+
+.header__marquee-content {
+  display: flex;
+  white-space: nowrap;
+  animation: marquee-scroll 20s linear infinite;
+  gap: 40px;
+  padding-right: 40px; /* equal to gap */
+}
+
+.header__marquee-wrapper:hover .header__marquee-content {
+  animation-play-state: paused;
+}
+
+@keyframes marquee-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.marquee-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.marquee-item__name {
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+}
+
+.marquee-item__price {
+  font-weight: 700;
+}
+
+.marquee-item__change {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+[data-theme='light'] .header__marquee-wrapper {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+[data-theme='light'] .dashboard__marquee-wrapper::before {
+  background: linear-gradient(to right, rgba(255, 255, 255, 0.9) 0%, transparent 100%);
+}
+[data-theme='light'] .dashboard__marquee-wrapper::after {
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.9) 0%, transparent 100%);
+}
