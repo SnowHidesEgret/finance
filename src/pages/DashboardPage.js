@@ -786,7 +786,7 @@ function showMarketPositionsModal(marketId, positions) {
           : `<span style="color:#64748b; display:inline-flex; align-items:center;" title="休市"><i data-lucide="moon" style="width:14px; height:14px;"></i></span>`;
 
         const dayPnl = pos.dayPnLCNY || pos.day_pnl_cny || 0;
-        const rateToCNY = pos.currentRate || 1;
+        const rateToCNY = pos.rateToCNY || pos.currentRate || 1;
         const dayPnlNative = dayPnl / rateToCNY;
         const totalPnlPct = pos.pnlPercent || pos.pnl_percent || 0;
         const marketValueCNY = pos.marketValueCNY || pos.valueCNY || 0;

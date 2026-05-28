@@ -127,7 +127,8 @@ export async function loadIndexMarqueeData() {
     { symbol: '^GSPC', name: '标普500' },
     { symbol: '^IXIC', name: '纳斯达克' },
     { symbol: '000300.SS', name: '沪深300' },
-    { symbol: '^HSI', name: '恒生指数' }
+    { symbol: '^HSI', name: '恒生指数' },
+    { symbol: '^VIX', name: 'VIX恐慌' }
   ];
 
   try {
