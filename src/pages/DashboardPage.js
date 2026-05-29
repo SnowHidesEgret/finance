@@ -454,7 +454,11 @@ function updatePositionTable(positions, rates) {
   const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
   function fmtNative(amount, currency) {
     const sym = CURRENCY_SYMBOL[currency] || '';
-    return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const num = Number(amount);
+    const absNum = Math.abs(num);
+    const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (num < 0) return `-${sym}${formattedAbs}`;
+    return `${sym}${formattedAbs}`;
   }
 
   // 排序
@@ -668,7 +672,11 @@ function showDayPnLModal(positions) {
   const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
   function fmtNative(amount, currency) {
     const sym = CURRENCY_SYMBOL[currency] || '';
-    return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const num = Number(amount);
+    const absNum = Math.abs(num);
+    const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (num < 0) return `-${sym}${formattedAbs}`;
+    return `${sym}${formattedAbs}`;
   }
 
   const rowsHtml = sorted.length === 0 
@@ -770,7 +778,11 @@ function showMarketPositionsModal(marketId, positions) {
   const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
   function fmtNative(amount, currency) {
     const sym = CURRENCY_SYMBOL[currency] || '';
-    return `${sym}${Number(amount).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const num = Number(amount);
+    const absNum = Math.abs(num);
+    const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (num < 0) return `-${sym}${formattedAbs}`;
+    return `${sym}${formattedAbs}`;
   }
 
   const rowsHtml = sorted.length === 0 

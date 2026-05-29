@@ -19,17 +19,21 @@ export function formatCurrency(amount, currency = 'CNY', showSign = false) {
   const symbol = symbols[currency] || currency + ' ';
   
   if (abs >= 1e8) {
-    formatted = `${symbol}${(amount / 1e8).toFixed(2)}亿`;
+    formatted = `${symbol}${(abs / 1e8).toFixed(2)}亿`;
   } else if (abs >= 1e4) {
-    formatted = `${symbol}${(amount / 1e4).toFixed(2)}万`;
+    formatted = `${symbol}${(abs / 1e4).toFixed(2)}万`;
   } else {
-    formatted = `${symbol}${amount.toLocaleString('zh-CN', {
+    formatted = `${symbol}${abs.toLocaleString('zh-CN', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     })}`;
   }
   
-  if (showSign && amount > 0) formatted = '+' + formatted;
+  if (amount < 0) {
+    formatted = '-' + formatted;
+  } else if (showSign && amount > 0) {
+    formatted = '+' + formatted;
+  }
   return formatted;
 }
 

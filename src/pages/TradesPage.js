@@ -13,8 +13,11 @@ const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
 function fmtNative(amount, currency, showSign = false) {
   const sym = CURRENCY_SYMBOL[currency] || '';
   const num = Number(amount);
-  const sign = showSign && num > 0 ? '+' : '';
-  return `${sign}${sym}${num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const absNum = Math.abs(num);
+  const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (num < 0) return `-${sym}${formattedAbs}`;
+  if (showSign && num > 0) return `+${sym}${formattedAbs}`;
+  return `${sym}${formattedAbs}`;
 }
 
 export async function renderTradesPage(container) {
