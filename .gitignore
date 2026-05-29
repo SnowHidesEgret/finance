@@ -29,3 +29,4 @@ dist-ssr
 *.sqlite3
 *.sql
 remote_data.sql
+.dev.vars
