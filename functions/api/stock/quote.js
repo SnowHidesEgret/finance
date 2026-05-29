@@ -92,57 +92,88 @@ export async function onRequestGet(context) {
   let quote = null;
 
   try {
-    // A) All Indices (Domestic & International) -> Tencent Finance
+    // A) All Indices (Domestic & International) -> Sina Finance
+    // (Tencent blocks Cloudflare IPs, and Finnhub blocks CFD indices on free tier)
     if (symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX')) {
-      let tencentSymbol = '';
+      let sinaSymbol = '';
+      let format = ''; // 'A' for domestic, 'B' for US gb_, 'C' for HK rt_
       
       // Domestic mapping
       if (symbol.endsWith('.SS') || symbol.endsWith('.SHH')) {
-        tencentSymbol = 'sh' + symbol.replace(/\.S(S|HH)$/, '');
+        sinaSymbol = 'sh' + symbol.replace(/\.S(S|HH)$/, '');
+        format = 'A';
       } else if (symbol.endsWith('.SZ') || symbol.endsWith('.SHZ')) {
-        tencentSymbol = 'sz' + symbol.replace(/\.S(Z|HZ)$/, '');
+        sinaSymbol = 'sz' + symbol.replace(/\.S(Z|HZ)$/, '');
+        format = 'A';
       }
       // International mapping
-      else if (symbol === '^IXIC') tencentSymbol = 'us.IXIC';
-      else if (symbol === '^GSPC') tencentSymbol = 'us.INX';
-      else if (symbol === '^HSI') tencentSymbol = 'hkHSI';
-      else tencentSymbol = 'us' + symbol.replace('^', '.'); // generic fallback
+      else if (symbol === '^IXIC') { sinaSymbol = 'gb_ixic'; format = 'B'; }
+      else if (symbol === '^GSPC') { sinaSymbol = 'gb_inx'; format = 'B'; }
+      else if (symbol === '^HSI') { sinaSymbol = 'rt_hkHSI'; format = 'C'; }
+      else { sinaSymbol = 'gb_' + symbol.replace('^', '').toLowerCase(); format = 'B'; } // generic fallback
 
-      const tencentUrl = `https://qt.gtimg.cn/q=${tencentSymbol}`;
-      const tencentResponse = await fetch(tencentUrl, {
-        headers: { 'Referer': 'https://gu.qq.com/' }
+      const sinaUrl = `https://hq.sinajs.cn/list=${sinaSymbol}`;
+      const sinaResponse = await fetch(sinaUrl, {
+        headers: { 'Referer': 'https://finance.sina.com.cn' }
       });
       
-      if (!tencentResponse.ok) {
-        throw new Error(`Tencent Finance returned HTTP ${tencentResponse.status}`);
+      if (!sinaResponse.ok) {
+        throw new Error(`Sina Finance returned HTTP ${sinaResponse.status}`);
       }
       
-      const text = await tencentResponse.text();
+      const text = await sinaResponse.text();
       const match = text.match(/="(.*)"/);
       if (!match || !match[1] || match[1].length < 10) {
-        throw new Error(`No data from Tencent Finance for ${symbol}`);
+        throw new Error(`No data from Sina Finance for ${symbol}`);
       }
       
-      const parts = match[1].split('~');
-      const price = parseFloat(parts[3]);
-      const prevClose = parseFloat(parts[4]);
-      const changeAmount = parseFloat(parts[31]);
-      const changePercent = parseFloat(parts[32]);
+      const parts = match[1].split(',');
+      let price = 0, prevClose = 0, changeAmount = 0, changePercent = 0;
+      let high = 0, low = 0, open = 0, volume = 0;
+      
+      if (format === 'A') { // sh/sz
+        price = parseFloat(parts[3]);
+        prevClose = parseFloat(parts[2]);
+        open = parseFloat(parts[1]);
+        high = parseFloat(parts[4]);
+        low = parseFloat(parts[5]);
+        volume = parseFloat(parts[8]);
+        changeAmount = price - prevClose;
+      } else if (format === 'B') { // gb_
+        price = parseFloat(parts[1]);
+        changePercent = parseFloat(parts[2]);
+        changeAmount = parseFloat(parts[4]);
+        prevClose = price - changeAmount;
+        open = parseFloat(parts[5]);
+        high = parseFloat(parts[6]);
+        low = parseFloat(parts[7]);
+      } else if (format === 'C') { // rt_hk
+        price = parseFloat(parts[6]);
+        prevClose = parseFloat(parts[3]);
+        open = parseFloat(parts[2]);
+        high = parseFloat(parts[4]);
+        low = parseFloat(parts[5]);
+        changeAmount = price - prevClose;
+      }
+
+      if (format !== 'B') {
+        changePercent = prevClose ? (changeAmount / prevClose) * 100 : 0;
+      }
       
       let currency = 'USD';
-      if (tencentSymbol.startsWith('sh') || tencentSymbol.startsWith('sz')) currency = 'CNY';
-      else if (tencentSymbol.startsWith('hk')) currency = 'HKD';
+      if (format === 'A') currency = 'CNY';
+      else if (format === 'C') currency = 'HKD';
 
       quote = {
         symbol: symbol,
         price,
         changeAmount,
         changePercent,
-        high: parseFloat(parts[33]) || 0,
-        low: parseFloat(parts[34]) || 0,
-        volume: parseFloat(parts[36]) || 0,
+        high: high || 0,
+        low: low || 0,
+        volume: volume || 0,
         prevClose,
-        open: parseFloat(parts[5]) || 0,
+        open: open || 0,
         latestTradingDay: new Date().toISOString().split('T')[0],
         currency: currency
       };
