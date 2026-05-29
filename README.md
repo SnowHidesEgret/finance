@@ -34,7 +34,7 @@ StockVault 是一个专为全球投资者打造的现代化股票持仓管理与
 ### 后端与数据库 (Backend & Database)
 - **边缘算力**: Cloudflare Pages Functions (基于 V8 Runtime 的 Serverless API)
 - **云数据库**: Cloudflare D1 (全网分布式 Serverless SQLite)
-- **三方集成**: Yahoo Finance (实时行情), Frankfurter (实时汇率)
+- **三方集成**: 新浪财经 (大盘指数), Yahoo Finance (个股实时行情), Frankfurter (实时汇率)
 
 ---
 
@@ -54,7 +54,8 @@ graph TD
     end
     
     API -->|缓存读取 / 写入| D1[Cloudflare D1 Serverless SQLite]
-    API -->|实时行情获取| Yahoo[Yahoo Finance API]
+    API -->|大盘指数获取| Sina[Sina Finance API]
+    API -->|个股行情获取| Yahoo[Yahoo Finance API]
     API -->|实时汇率获取| Frankfurter[Frankfurter FX API]
 ```
 
@@ -73,6 +74,12 @@ graph TD
 后端采用 Cloudflare Pages Functions 实现了安全的中间件拦截链（Middleware Chain）：
 - **跨域与监控**: 提供 CORS 预检处理，并计算响应耗时写入 `X-Response-Time` 响应头中。
 - **安全鉴权**: 除了登录接口外，所有数据操作接口均需通过统一的 Token 鉴权中间件，直接对接云端 D1 数据库进行校验，防范越权数据操纵。
+
+### 4. 智能多源行情路由引擎 (`functions/api/stock/quote.js`)
+为了规避各大数据源对海外云数据中心（尤其是 Cloudflare 边缘节点）的封锁，后端实现了一套极为鲁棒的智能路由策略：
+- **全球大盘指数 (Indices)**：包括国内指数（如沪深300）、港股指数（恒指）以及美股指数（纳指、标普500），全部统一路由至抗封锁能力强、无需 API Key 且极度稳定的**新浪财经 API**。*(注：受限于美国交易所数据授权，所有公开免费接口的美股指数盘中均存在固定 15 分钟延时)*。
+- **全球普通个股 (Stocks)**：所有普通的 A股、港股、美股等个股代码则路由至 **Yahoo Finance API** 获取实时行情与交易量。
+- **回退机制与特例**：由于新浪等国内接口不提供有效的 VIX 恐慌指数（`^VIX`），该指数请求会被智能回退至 Yahoo Finance 进行获取。
 
 ---
 
