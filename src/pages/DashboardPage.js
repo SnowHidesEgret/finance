@@ -28,7 +28,7 @@ export async function renderDashboardPage(container) {
 
       <!-- KPI 指标卡 -->
       <section class="dashboard__kpi-row">
-        <div class="kpi-card kpi-card--total animate-fade-in-up delay-1" id="kpi-total-value">
+        <div class="kpi-card kpi-card--total animate-fade-in-up delay-1" id="kpi-total-value" style="cursor:pointer;" title="点击查看资产分布">
           <div class="kpi-card__icon">💰</div>
           <div class="kpi-card__content">
             <div class="kpi-card__label">持仓资产 (CNY)</div>
@@ -174,6 +174,14 @@ export async function renderDashboardPage(container) {
     });
   }
   
+  // 绑定资产点击事件
+  const valueCard = container.querySelector('#kpi-total-value');
+  if (valueCard) {
+    valueCard.addEventListener('click', () => {
+      showValueModal(cachedPositions);
+    });
+  }
+
   // 绑定本金点击事件
   const costCard = container.querySelector('#kpi-total-cost');
   if (costCard) {
@@ -938,5 +946,66 @@ async function showCostModal(positions) {
     }
   } catch (err) {
     console.error('Failed to load costBar chart:', err);
+  }
+}
+
+/**
+ * 显示资产分布弹窗
+ */
+async function showValueModal(positions) {
+  document.getElementById('value-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'value-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:800px; max-width:95vw; 
+      box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+          💰 资产分布 (CNY)
+        </h3>
+        <button id="close-value-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+      </div>
+      
+      <div id="value-chart-container" style="height: 400px; width: 100%;"></div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-value-modal').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // 准备图表数据
+  const openPositions = positions.filter(p => p.status === 'OPEN' || !p.status);
+  const chartData = openPositions.map(p => {
+    // 优先使用已计算好的 CNY 计价市值
+    let marketValue = p.marketValueCNY || p.valueCNY;
+    if (marketValue === undefined) {
+      const rateToCNY = p.rateToCNY || p.currentRate || 1;
+      const currentPrice = p.currentPrice || p.current_price || p.open_price || 0;
+      marketValue = (currentPrice * p.quantity) * rateToCNY;
+    }
+    return { name: p.name, marketValue: marketValue };
+  }).sort((a, b) => b.marketValue - a.marketValue);
+
+  // 加载并渲染图表
+  try {
+    const { renderValueBar } = await import('../charts/valueBar.js');
+    const container = document.getElementById('value-chart-container');
+    if (container) {
+      renderValueBar(container, chartData);
+    }
+  } catch (err) {
+    console.error('Failed to load valueBar chart:', err);
   }
 }
