@@ -4,7 +4,7 @@
  * 仪表盘汇总才换算人民币
  */
 
-import { formatPercent, formatQuantity, getPnLClass } from '../utils/format.js';
+import { formatPercent, formatQuantity, getPnLClass, calcHoldingDays } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get, put, del } from '../services/api.js';
 
@@ -213,12 +213,14 @@ export async function renderPositionsPage(container) {
                 <th class="table__th table__th--right">当前市值</th>
                 <th class="table__th table__th--right">浮动盈亏</th>
                 <th class="table__th table__th--right">收益率</th>
+                <th class="table__th table__th--right">持仓天数</th>
+                <th class="table__th table__th--right">年化收益</th>
                 <th class="table__th table__th--right">状态</th>
                 <th class="table__th table__th--right">操作</th>
               </tr>
             </thead>
             <tbody id="full-positions-tbody">
-              <tr><td colspan="11" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="13" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -251,7 +253,7 @@ async function loadPositions() {
   const market = document.getElementById('filter-market')?.value || '';
   const status = document.getElementById('filter-status')?.value || 'OPEN';
 
-  tbody.innerHTML = `<tr><td colspan="11" class="table__empty">加载中...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="13" class="table__empty">加载中...</td></tr>`;
 
   try {
     const params = {};
@@ -268,7 +270,7 @@ async function loadPositions() {
 
     if (positions.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="11" class="table__empty">
+        <tr><td colspan="13" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无数据</p>
@@ -317,6 +319,12 @@ async function loadPositions() {
       const pnlOrig   = valueOrig - costOrig;
       const pnlPct    = costOrig > 0 ? (pnlOrig / costOrig) * 100 : 0;
 
+      // 持仓天数与年化收益率
+      const holdingDays = isClosed
+        ? calcHoldingDays(pos.open_date, pos.close_date)
+        : calcHoldingDays(pos.open_date);
+      const annualizedRtn = holdingDays > 0 ? (pnlPct / holdingDays) * 365 : 0;
+
       const priceDisplay = hasLivePrice
         ? fmtNative(currentPrice, currency)
         : `<span style="color:var(--color-text-muted)" title="未获取到实时行情，显示开仓价">${fmtNative(currentPrice, currency)} <small>*</small></span>`;
@@ -340,6 +348,12 @@ async function loadPositions() {
           </td>
           <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
             ${formatPercent(pnlPct)}
+          </td>
+          <td class="table__td table__td--right table__td--mono" title="持仓天数">
+            ${holdingDays}天
+          </td>
+          <td class="table__td table__td--right table__td--${getPnLClass(annualizedRtn)}">
+            ${formatPercent(annualizedRtn)}
           </td>
           <td class="table__td table__td--right">
             <span class="tag" style="background:${isClosed ? '#374151' : '#065f46'}">

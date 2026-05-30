@@ -14,6 +14,7 @@ import { isMarketOpen } from '../utils/marketHours.js';
 let currentSortField = 'weight';
 let currentSortOrder = 'desc';
 let cachedPositions = [];
+let cachedMarketSummaries = {};
 
 /**
  * 渲染仪表盘页面
@@ -58,6 +59,13 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__label">本金</div>
             <div class="kpi-card__value" id="val-total-cost">--</div>
             <div class="kpi-card__sub" id="val-position-count">-- 笔持仓</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-return-rates" style="cursor:pointer;" title="点击查看各国市场年化收益率">
+          <div class="kpi-card__icon">🎯</div>
+          <div class="kpi-card__content">
+            <div class="kpi-card__label">年化收益率</div>
+            <div class="kpi-card__value" id="val-annualized-return">--</div>
           </div>
         </div>
       </section>
@@ -118,11 +126,12 @@ export async function renderDashboardPage(container) {
                 <th class="table__th table__th--right">市值(¥)</th>
                 <th class="table__th table__th--right dashboard-sortable" data-sort="pnl" style="cursor:pointer; user-select:none;" title="点击按盈亏排序">盈亏(¥) <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right">盈亏%</th>
+                <th class="table__th table__th--right">年化</th>
                 <th class="table__th table__th--right dashboard-sortable" data-sort="weight" style="cursor:pointer; user-select:none;" title="点击按占比排序">占比 <span class="sort-icon">↓</span></th>
               </tr>
             </thead>
             <tbody id="positions-tbody">
-              <tr><td colspan="10" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="11" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -190,6 +199,14 @@ export async function renderDashboardPage(container) {
     });
   }
   
+  // 绑定收益率点击事件
+  const returnCard = container.querySelector('#kpi-return-rates');
+  if (returnCard) {
+    returnCard.addEventListener('click', () => {
+      showReturnRatesModal(cachedMarketSummaries);
+    });
+  }
+  
   // 绑定市场概览点击事件
   const marketOverview = container.querySelector('#market-overview');
   if (marketOverview) {
@@ -234,8 +251,9 @@ async function loadDashboardData(container) {
     try {
       const quoteData = await get('/api/summary');
       if (quoteData) {
+        cachedMarketSummaries = quoteData.markets || quoteData.marketSummaries || {};
         updateKPICards(quoteData);
-        updateMarketOverview(quoteData.markets || quoteData.marketSummaries || {});
+        updateMarketOverview(cachedMarketSummaries);
         updatePositionTable(quoteData.positions || positionList, rates);
         updateCharts(quoteData, positionList, rates);
         return;
@@ -255,10 +273,13 @@ async function loadDashboardData(container) {
       totalPnlCNY: summary.totalPnLCNY,
       totalPnlPercent: summary.totalPnLPercent,
       dayPnl: summary.totalDayPnL,
-      positionCount: summary.positionCount
+      positionCount: summary.positionCount,
+      totalAnnualizedReturn: summary.totalAnnualizedReturn,
+      totalMonthlyReturn: summary.totalMonthlyReturn
     });
     
-    updateMarketOverview(summary.marketSummaries);
+    cachedMarketSummaries = summary.marketSummaries || {};
+    updateMarketOverview(cachedMarketSummaries);
     updatePositionTable(summary.positions || positionList, rates);
     updateCharts(summary, positionList, rates);
     
@@ -310,6 +331,15 @@ function updateKPICards(data) {
   
   const countEl = document.getElementById('val-position-count');
   if (countEl) countEl.textContent = `${count} 笔持仓`;
+  
+  // 收益率卡片
+  const annualizedReturn = data.totalAnnualizedReturn || data.totalAnnualizedReturn || 0;
+  
+  const annualEl = document.getElementById('val-annualized-return');
+  if (annualEl) {
+    annualEl.textContent = formatPercent(annualizedReturn);
+    annualEl.className = `kpi-card__value kpi-card__value--${getPnLClass(annualizedReturn)}`;
+  }
 }
 
 /**
@@ -397,6 +427,9 @@ function renderMarketCard(marketId, data, totalValue = 0) {
       <div class="market-summary-card__header">
         <span class="market-summary-card__flag">${market.flag}</span>
         <span class="market-summary-card__name">${market.label}</span>
+        <span style="margin-left:8px; font-size:0.8rem; font-weight:600;" class="market-summary-card__stat-value--${getPnLClass(data?.monthlyReturn || 0)}">
+          月收益 ${formatPercent(data?.monthlyReturn || 0)}
+        </span>
         <span class="market-summary-card__count">${count} 笔</span>
       </div>
       
@@ -455,7 +488,7 @@ function updatePositionTable(positions, rates) {
   if (!cachedPositions || cachedPositions.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="table__empty">
+        <td colspan="11" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无持仓</p>
@@ -525,6 +558,9 @@ function updatePositionTable(positions, rates) {
         </td>
         <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
           ${formatPercent(pnlPct)}
+        </td>
+        <td class="table__td table__td--right table__td--${getPnLClass(pos.annualizedReturn || 0)}">
+          ${formatPercent(pos.annualizedReturn || 0)}
         </td>
         <td class="table__td table__td--right">${weight.toFixed(1)}%</td>
       </tr>
@@ -650,7 +686,7 @@ function showEmptyState() {
   if (tbody) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="10" class="table__empty">
+        <td colspan="11" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon animate-float">📊</div>
             <h3 class="empty-state__title">开始您的投资之旅</h3>
@@ -802,7 +838,7 @@ function showMarketPositionsModal(marketId, positions) {
   }
 
   const rowsHtml = sorted.length === 0 
-    ? `<tr><td colspan="7" class="table__empty">暂无持仓</td></tr>`
+    ? `<tr><td colspan="8" class="table__empty">暂无持仓</td></tr>`
     : sorted.map(pos => {
         const currency = pos.currency || market.currency || 'CNY';
         const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
@@ -845,6 +881,9 @@ function showMarketPositionsModal(marketId, positions) {
             <td class="table__td table__td--right table__td--${getPnLClass(totalPnlPct)}">
               ${formatPercent(totalPnlPct)}
             </td>
+            <td class="table__td table__td--right table__td--${getPnLClass(pos.annualizedReturn || 0)}">
+              ${formatPercent(pos.annualizedReturn || 0)}
+            </td>
           </tr>
         `;
       }).join('');
@@ -873,6 +912,7 @@ function showMarketPositionsModal(marketId, positions) {
               <th class="table__th table__th--right">今日盈亏</th>
               <th class="table__th table__th--right">今日盈亏%</th>
               <th class="table__th table__th--right">总盈亏%</th>
+              <th class="table__th table__th--right">年化</th>
             </tr>
           </thead>
           <tbody>
@@ -1009,3 +1049,82 @@ async function showValueModal(positions) {
     console.error('Failed to load valueBar chart:', err);
   }
 }
+
+/**
+ * 显示各国市场年化收益率弹窗
+ */
+function showReturnRatesModal(marketSummaries) {
+  document.getElementById('return-rates-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'return-rates-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
+
+  // Filter out empty markets and calculate rows
+  const rowsHtml = MARKET_IDS.map(id => {
+    const data = marketSummaries[id];
+    if (!data || data.positionCount === 0) return '';
+    const market = MARKETS[id];
+    const annualizedReturn = data.annualizedReturn || 0;
+    
+    return `
+      <tr class="table__row">
+        <td class="table__td">
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${market.flag} <span style="font-weight:600">${market.label}</span>
+          </div>
+        </td>
+        <td class="table__td table__td--right">
+          ${data.positionCount} 笔
+        </td>
+        <td class="table__td table__td--right table__td--mono">
+          ${formatCurrency(data.totalValue || 0)}
+        </td>
+        <td class="table__td table__td--right table__td--${getPnLClass(annualizedReturn)}">
+          ${formatPercent(annualizedReturn)}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:max-content; min-width:400px; max-width:95vw; 
+      box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+          🎯 各国市场年化收益率
+        </h3>
+        <button id="close-return-rates-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+      </div>
+      
+      <div class="table-wrapper" style="border-radius:12px;">
+        <table class="table" style="width:100%;">
+          <thead style="background:var(--color-bg-card);">
+            <tr>
+              <th class="table__th">市场</th>
+              <th class="table__th table__th--right">持仓</th>
+              <th class="table__th table__th--right">总市值(CNY)</th>
+              <th class="table__th table__th--right">年化收益率</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || '<tr><td colspan="4" class="table__empty">暂无持仓</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-return-rates-modal').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+

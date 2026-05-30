@@ -43,6 +43,7 @@ export function calculatePositionPnL(position, currentPrice, rateToCNY) {
   
   // 年化收益率 (%)
   const annualizedReturn = toFixed2((pnlPercent / holdingDays) * 365);
+  const monthlyReturn = toFixed2((pnlPercent / holdingDays) * 30);
   
   return {
     costOriginal: toFixed2(costInOriginal),
@@ -53,6 +54,7 @@ export function calculatePositionPnL(position, currentPrice, rateToCNY) {
     pnlPercent,
     holdingDays,
     annualizedReturn,
+    monthlyReturn,
     currentPrice,
     currentRate
   };
@@ -67,7 +69,8 @@ export function calculateClosedPnL(position) {
   const {
     open_price, close_price, quantity,
     commission = 0, close_commission = 0,
-    open_rate_to_cny, close_rate_to_cny
+    open_rate_to_cny, close_rate_to_cny,
+    open_date, close_date
   } = position;
   
   if (!close_price || !close_rate_to_cny) return null;
@@ -77,11 +80,21 @@ export function calculateClosedPnL(position) {
   const realizedPnL = toFixed2(proceedsCNY - costCNY);
   const realizedPnLPercent = costCNY !== 0 ? toFixed2((realizedPnL / costCNY) * 100) : 0;
   
+  // 持仓天数与收益率
+  const holdingDays = Math.max(1, Math.floor(
+    (new Date(close_date || new Date()) - new Date(open_date)) / (1000 * 60 * 60 * 24)
+  ));
+  const annualizedReturn = toFixed2((realizedPnLPercent / holdingDays) * 365);
+  const monthlyReturn = toFixed2((realizedPnLPercent / holdingDays) * 30);
+  
   return {
     costCNY,
     proceedsCNY,
     realizedPnL,
-    realizedPnLPercent
+    realizedPnLPercent,
+    holdingDays,
+    annualizedReturn,
+    monthlyReturn
   };
 }
 
@@ -111,6 +124,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
       totalCost: 0,
       totalPnL: 0,
       positionCount: 0,
+      totalWeightedDays: 0,
       positions: []
     };
   }
@@ -154,6 +168,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
       ms.totalCost += pnl.costCNY;
       ms.totalPnL += pnl.pnlCNY;
       ms.positionCount++;
+      ms.totalWeightedDays += pnl.holdingDays * pnl.marketValueCNY;
       ms.positions.push(detail);
     }
     
@@ -184,10 +199,24 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     ms.totalPnL = toFixed2(ms.totalPnL);
     ms.pnlPercent = ms.totalCost > 0 ? toFixed2((ms.totalPnL / ms.totalCost) * 100) : 0;
     ms.weight = totalValueCNY > 0 ? toFixed2((ms.totalValue / totalValueCNY) * 100) : 0;
+    // 加权平均持仓天数 → 年化 / 月收益率
+    const avgDays = ms.totalValue > 0 ? Math.max(1, Math.round(ms.totalWeightedDays / ms.totalValue)) : 1;
+    ms.avgHoldingDays = avgDays;
+    ms.annualizedReturn = toFixed2((ms.pnlPercent / avgDays) * 365);
+    ms.monthlyReturn = toFixed2((ms.pnlPercent / avgDays) * 30);
   }
   
   const totalPnLCNY = toFixed2(totalValueCNY - totalCostCNY);
   const totalPnLPercent = totalCostCNY > 0 ? toFixed2((totalPnLCNY / totalCostCNY) * 100) : 0;
+  
+  // 组合级加权平均持仓天数
+  let totalWeightedDays = 0;
+  for (const detail of positionDetails) {
+    totalWeightedDays += detail.holdingDays * detail.marketValueCNY;
+  }
+  const totalAvgHoldingDays = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
+  const totalAnnualizedReturn = toFixed2((totalPnLPercent / totalAvgHoldingDays) * 365);
+  const totalMonthlyReturn = toFixed2((totalPnLPercent / totalAvgHoldingDays) * 30);
   
   return {
     totalValueCNY: toFixed2(totalValueCNY),
@@ -195,6 +224,9 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     totalPnLCNY,
     totalPnLPercent,
     totalDayPnL: toFixed2(totalDayPnL),
+    totalAvgHoldingDays,
+    totalAnnualizedReturn,
+    totalMonthlyReturn,
     positionCount: positionDetails.length,
     positions: positionDetails,
     marketSummaries,

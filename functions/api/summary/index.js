@@ -176,6 +176,13 @@ export async function onRequestGet(context) {
     const pnlCNY         = round2(valueCNY - costCNY);
     const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
 
+    // Holding days & return rates
+    const holdingDays = Math.max(1, Math.floor(
+      (Date.now() - new Date(p.open_date).getTime()) / (1000 * 60 * 60 * 24)
+    ));
+    const annualizedReturn = round2((pnlPercent / holdingDays) * 365);
+    const monthlyReturn    = round2((pnlPercent / holdingDays) * 30);
+
     // Day PnL
     const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
 
@@ -185,13 +192,14 @@ export async function onRequestGet(context) {
 
     const mkt = p.market;
     if (!marketBreakdown[mkt]) {
-      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0 };
+      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0 };
     }
     marketBreakdown[mkt].value  += valueCNY;
     marketBreakdown[mkt].cost   += costCNY;
     marketBreakdown[mkt].count  += 1;
     marketBreakdown[mkt].pnl    += pnlCNY;
     marketBreakdown[mkt].dayPnl += dayChangeCNY;
+    marketBreakdown[mkt].weightedDays += holdingDays * valueCNY;
 
     positionDetails.push({
       ...p,
@@ -203,6 +211,9 @@ export async function onRequestGet(context) {
       marketValueCNY: valueCNY,
       pnlCNY,
       pnlPercent,
+      holdingDays,
+      annualizedReturn,
+      monthlyReturn,
       dayPnLCNY: dayChangeCNY,
       hasLivePrice,
       weight: 0, // calculated below
@@ -217,19 +228,33 @@ export async function onRequestGet(context) {
   const totalPnlCNY     = round2(totalValueCNY - totalCostCNY);
   const totalPnlPercent = totalCostCNY !== 0 ? round2((totalPnlCNY / totalCostCNY) * 100) : 0;
 
+  // Portfolio-level weighted average holding days & return rates
+  let totalWeightedDays = 0;
+  for (const pd of positionDetails) {
+    totalWeightedDays += pd.holdingDays * pd.marketValueCNY;
+  }
+  const totalAvgHoldingDays   = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
+  const totalAnnualizedReturn = round2((totalPnlPercent / totalAvgHoldingDays) * 365);
+  const totalMonthlyReturn    = round2((totalPnlPercent / totalAvgHoldingDays) * 30);
+
   // Build per-market stats
   const markets = {};
   for (const [mkt, data] of Object.entries(marketBreakdown)) {
+    const mktPnlPct = data.cost !== 0 ? round2((data.pnl / data.cost) * 100) : 0;
+    const avgDays   = data.value > 0 ? Math.max(1, Math.round(data.weightedDays / data.value)) : 1;
     markets[mkt] = {
-      totalValue:    round2(data.value),
-      totalCost:     round2(data.cost),
-      totalPnL:      round2(data.pnl),
-      totalValueCNY: round2(data.value),
-      totalCostCNY:  round2(data.cost),
-      totalPnlCNY:   round2(data.pnl),
-      pnlPercent:    data.cost !== 0 ? round2((data.pnl / data.cost) * 100) : 0,
-      positionCount: data.count,
-      dayPnL:        round2(data.dayPnl),
+      totalValue:       round2(data.value),
+      totalCost:        round2(data.cost),
+      totalPnL:         round2(data.pnl),
+      totalValueCNY:    round2(data.value),
+      totalCostCNY:     round2(data.cost),
+      totalPnlCNY:      round2(data.pnl),
+      pnlPercent:       mktPnlPct,
+      avgHoldingDays:   avgDays,
+      annualizedReturn: round2((mktPnlPct / avgDays) * 365),
+      monthlyReturn:    round2((mktPnlPct / avgDays) * 30),
+      positionCount:    data.count,
+      dayPnL:           round2(data.dayPnl),
     };
   }
 
@@ -241,6 +266,9 @@ export async function onRequestGet(context) {
         totalCostCNY:   round2(totalCostCNY),
         totalPnlCNY,
         totalPnlPercent,
+        totalAvgHoldingDays,
+        totalAnnualizedReturn,
+        totalMonthlyReturn,
         dayPnl:         round2(totalDayPnL),
         positionCount:  positionDetails.length,
         marketCounts:   Object.fromEntries(Object.entries(marketBreakdown).map(([m, d]) => [m, d.count])),
