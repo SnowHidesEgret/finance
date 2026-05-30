@@ -105,6 +105,22 @@ export async function onRequestGet(context) {
     });
   }
 
+  // Load all trades for active positions to compute lot-level returns
+  const posIds = positions.map(p => `'${p.id}'`).join(',');
+  let allTrades = [];
+  if (posIds) {
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM trades WHERE position_id IN (${posIds}) ORDER BY trade_date ASC, created_at ASC`
+    ).all();
+    allTrades = results || [];
+  }
+  
+  const tradesByPosition = {};
+  for (const t of allTrades) {
+    if (!tradesByPosition[t.position_id]) tradesByPosition[t.position_id] = [];
+    tradesByPosition[t.position_id].push(t);
+  }
+
   // ── 3. Fetch live quotes for all symbols in parallel ─────────────────
   // Deduplicate symbols
   const uniqueSymbols = [...new Set(positions.map(p => p.symbol))];
@@ -176,12 +192,79 @@ export async function onRequestGet(context) {
     const pnlCNY         = round2(valueCNY - costCNY);
     const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
 
-    // Holding days & return rates
-    const holdingDays = Math.max(1, Math.floor(
-      (Date.now() - new Date(p.open_date).getTime()) / (1000 * 60 * 60 * 24)
-    ));
-    const annualizedReturn = round2((pnlPercent / holdingDays) * 365);
-    const monthlyReturn    = round2((pnlPercent / holdingDays) * 30);
+    // Lot-level calculation for accurate return rates
+    const pTrades = tradesByPosition[p.id] || [];
+    let priorSold = 0;
+    const buyTrades = [];
+    for (const t of pTrades) {
+      if (t.trade_type === 'SELL') priorSold += t.quantity;
+      else if (t.trade_type === 'BUY') buyTrades.push(t);
+    }
+    
+    let priorSoldTracker = priorSold;
+    const activeLots = [];
+    for (const b of buyTrades) {
+      let bQty = b.quantity;
+      if (priorSoldTracker > 0) {
+        if (priorSoldTracker >= bQty) {
+          priorSoldTracker -= bQty;
+          continue;
+        } else {
+          bQty -= priorSoldTracker;
+          priorSoldTracker = 0;
+        }
+      }
+      activeLots.push({ ...b, activeQuantity: bQty });
+    }
+    
+    let weightedHoldingDays = 0;
+    let lotTotalCostCNY = 0;
+    const nowMs = Date.now();
+    const processedLots = [];
+    
+    for (const lot of activeLots) {
+      const lotDays = Math.max(1, Math.floor((nowMs - new Date(lot.trade_date).getTime()) / (1000 * 60 * 60 * 24)));
+      const lotCostNative = lot.activeQuantity * lot.price;
+      const lotCostCNYValue = lotCostNative * (lot.rate_to_cny || rateToCNY || 1);
+      
+      const lotValueNative = lot.activeQuantity * currentPrice;
+      const lotPnLNative = lotValueNative - lotCostNative;
+      const lotPnlPercent = lotCostNative > 0 ? (lotPnLNative / lotCostNative) * 100 : 0;
+      const lotAnnualizedReturn = lotDays > 0 ? (lotPnlPercent / lotDays) * 365 : 0;
+      
+      processedLots.push({
+        ...lot,
+        holdingDays: lotDays,
+        costNative: round2(lotCostNative),
+        valueNative: round2(lotValueNative),
+        pnlNative: round2(lotPnLNative),
+        pnlPercent: round2(lotPnlPercent),
+        annualizedReturn: round2(lotAnnualizedReturn)
+      });
+      
+      weightedHoldingDays += lotDays * lotCostCNYValue;
+      lotTotalCostCNY += lotCostCNYValue;
+    }
+    
+    // Find the earliest trade date among ALL buy trades for this continuous position
+    let earliestDate = p.open_date;
+    if (buyTrades.length > 0) {
+      earliestDate = buyTrades[0].trade_date;
+      for (const t of buyTrades) {
+        if (new Date(t.trade_date) < new Date(earliestDate)) {
+          earliestDate = t.trade_date;
+        }
+      }
+    }
+    
+    // Holding days for UI display (from earliest trade date)
+    const displayHoldingDays = Math.max(1, Math.floor((nowMs - new Date(earliestDate).getTime()) / (1000 * 60 * 60 * 24)));
+    const avgHoldingDays = lotTotalCostCNY > 0 ? Math.max(1, Math.round(weightedHoldingDays / lotTotalCostCNY)) : displayHoldingDays;
+
+    // Return rates (using avgHoldingDays)
+    const holdingDays = displayHoldingDays;
+    const annualizedReturn = round2((pnlPercent / avgHoldingDays) * 365);
+    const monthlyReturn    = round2((pnlPercent / avgHoldingDays) * 30);
 
     // Day PnL
     const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
@@ -199,7 +282,7 @@ export async function onRequestGet(context) {
     marketBreakdown[mkt].count  += 1;
     marketBreakdown[mkt].pnl    += pnlCNY;
     marketBreakdown[mkt].dayPnl += dayChangeCNY;
-    marketBreakdown[mkt].weightedDays += holdingDays * valueCNY;
+    marketBreakdown[mkt].weightedDays += avgHoldingDays * valueCNY;
 
     positionDetails.push({
       ...p,
@@ -211,11 +294,13 @@ export async function onRequestGet(context) {
       marketValueCNY: valueCNY,
       pnlCNY,
       pnlPercent,
-      holdingDays,
+      holdingDays, // used for UI display
+      avgHoldingDays, // actual holding days used for math
       annualizedReturn,
       monthlyReturn,
       dayPnLCNY: dayChangeCNY,
       hasLivePrice,
+      activeLots: processedLots,
       weight: 0, // calculated below
     });
   }
@@ -231,7 +316,7 @@ export async function onRequestGet(context) {
   // Portfolio-level weighted average holding days & return rates
   let totalWeightedDays = 0;
   for (const pd of positionDetails) {
-    totalWeightedDays += pd.holdingDays * pd.marketValueCNY;
+    totalWeightedDays += pd.avgHoldingDays * pd.marketValueCNY;
   }
   const totalAvgHoldingDays   = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
   const totalAnnualizedReturn = round2((totalPnlPercent / totalAvgHoldingDays) * 365);

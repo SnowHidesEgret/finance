@@ -167,6 +167,75 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
   });
 }
 
+// ── 逐笔明细弹窗 ─────────────────────────────────────────────────────────────
+
+function showActiveLotsModal(pos, currency, activeLots) {
+  document.getElementById('active-lots-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'active-lots-modal';
+  overlay.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;z-index:9999;
+    animation:fadeIn 0.15s ease;
+  `;
+  
+  const lotsHtml = activeLots && activeLots.length > 0 ? activeLots.map(lot => `
+    <tr class="table__row">
+      <td class="table__td">${lot.trade_date}</td>
+      <td class="table__td table__td--right">${formatQuantity(lot.activeQuantity)}</td>
+      <td class="table__td table__td--right table__td--mono">${fmtNative(lot.price, currency)}</td>
+      <td class="table__td table__td--right table__td--mono">${fmtNative(lot.costNative, currency)}</td>
+      <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(lot.pnlNative)}">${fmtNative(lot.pnlNative, currency, true)}</td>
+      <td class="table__td table__td--right table__td--${getPnLClass(lot.pnlPercent)}">${formatPercent(lot.pnlPercent)}</td>
+      <td class="table__td table__td--right">${lot.holdingDays}天</td>
+      <td class="table__td table__td--right table__td--${getPnLClass(lot.annualizedReturn)}">${formatPercent(lot.annualizedReturn)}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="8" class="table__empty">暂无未平仓批次数据</td></tr>`;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-surface,#1e1e2e);border:1px solid var(--color-border,#374151);
+      border-radius:16px;padding:32px;max-width:900px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.5);
+      max-height: 90vh; display: flex; flex-direction: column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+        <h3 style="margin:0;font-size:1.25rem;color:var(--color-text-primary);"><span style="color:var(--color-primary);">${pos.name}</span> 逐笔未平仓明细</h3>
+        <button id="lots-close" class="btn btn--ghost" style="padding:8px;"><i data-lucide="x" style="width: 24px; height: 24px;"></i></button>
+      </div>
+      
+      <div class="table-wrapper" style="flex:1; overflow-y:auto; border:1px solid var(--color-border); border-radius:8px;">
+        <table class="table" style="margin:0;">
+          <thead style="position:sticky;top:0;background:var(--color-surface);z-index:1;">
+            <tr>
+              <th class="table__th">交易日期</th>
+              <th class="table__th table__th--right">剩余数量</th>
+              <th class="table__th table__th--right">成本均价</th>
+              <th class="table__th table__th--right">持有成本</th>
+              <th class="table__th table__th--right">浮动盈亏</th>
+              <th class="table__th table__th--right">盈亏比例</th>
+              <th class="table__th table__th--right">持仓天数</th>
+              <th class="table__th table__th--right">年化收益率</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lotsHtml}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#lots-close').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+}
+
 // ── 页面渲染 ──────────────────────────────────────────────────────────────────
 
 export async function renderPositionsPage(container) {
@@ -320,10 +389,14 @@ async function loadPositions() {
       const pnlPct    = costOrig > 0 ? (pnlOrig / costOrig) * 100 : 0;
 
       // 持仓天数与年化收益率
-      const holdingDays = isClosed
-        ? calcHoldingDays(pos.open_date, pos.close_date)
-        : calcHoldingDays(pos.open_date);
-      const annualizedRtn = holdingDays > 0 ? (pnlPct / holdingDays) * 365 : 0;
+      let holdingDays, annualizedRtn;
+      if (isClosed) {
+        holdingDays = calcHoldingDays(pos.open_date, pos.close_date);
+        annualizedRtn = holdingDays > 0 ? (pnlPct / holdingDays) * 365 : 0;
+      } else {
+        holdingDays = live?.holdingDays || calcHoldingDays(pos.open_date);
+        annualizedRtn = live?.annualizedReturn ?? (holdingDays > 0 ? (pnlPct / holdingDays) * 365 : 0);
+      }
 
       const priceDisplay = hasLivePrice
         ? fmtNative(currentPrice, currency)
@@ -332,7 +405,7 @@ async function loadPositions() {
       return `
         <tr class="table__row table__row--hoverable" data-id="${pos.id}">
           <td class="table__td">
-            <div style="font-weight:600">${pos.name}</div>
+            <div class="pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); display:inline-block; border-bottom:1px dashed var(--color-primary);" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细">${pos.name}</div>
             <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
           </td>
           <td class="table__td" title="${m.label || pos.market}">
@@ -388,6 +461,19 @@ async function loadPositions() {
         </tr>
       `;
     }).join('');
+
+    // 绑定查看逐笔明细事件
+    tbody.querySelectorAll('.pos-name-click').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const { id, symbol, name, currency } = btn.dataset;
+        const live = liveMap.get(symbol.toUpperCase());
+        if (live && live.activeLots && live.activeLots.length > 0) {
+          showActiveLotsModal({ id, name, symbol }, currency, live.activeLots);
+        } else {
+          alert('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
+        }
+      });
+    });
 
     // 绑定删除按钮事件
     tbody.querySelectorAll('.btn-delete-pos').forEach(btn => {
