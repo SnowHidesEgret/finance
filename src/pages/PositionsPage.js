@@ -273,7 +273,7 @@ export async function renderPositionsPage(container) {
           <table class="table" id="full-positions-table">
             <thead>
               <tr>
-                <th class="table__th">名称/代码</th>
+                <th class="table__th" style="min-width: 160px;">名称/代码</th>
                 <th class="table__th">市场</th>
                 <th class="table__th table__th--right">数量</th>
                 <th class="table__th table__th--right">开仓均价</th>
@@ -405,7 +405,7 @@ async function loadPositions() {
       return `
         <tr class="table__row table__row--hoverable" data-id="${pos.id}">
           <td class="table__td">
-            <div class="pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); display:inline-block; border-bottom:1px dashed var(--color-primary);" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细">${pos.name}</div>
+            <div class="pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); display:inline-block; border-bottom:1px dashed var(--color-primary); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细 (${pos.name})">${pos.name}</div>
             <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
           </td>
           <td class="table__td" title="${m.label || pos.market}">

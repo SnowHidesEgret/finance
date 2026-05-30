@@ -82,6 +82,72 @@ export async function onRequestPut(context) {
     );
   }
 
+  // Recalculate position if position_id is set
+  if (updated.position_id) {
+    const positionId = updated.position_id;
+    
+    const { results: allTrades } = await env.DB.prepare(
+      'SELECT trade_type, quantity, price, rate_to_cny, commission FROM trades WHERE position_id = ?1 ORDER BY trade_date ASC, created_at ASC'
+    ).bind(positionId).all();
+
+    let totalSold = 0;
+    const buyTrades = [];
+    let totalBuyCommission = 0;
+    
+    for (const t of (allTrades || [])) {
+      if (t.trade_type === 'SELL') {
+        totalSold += t.quantity;
+      } else if (t.trade_type === 'BUY') {
+        buyTrades.push(t);
+        totalBuyCommission += (t.commission || 0);
+      }
+    }
+
+    let remainingCostNative = 0;
+    let remainingCostCNY = 0;
+    let remainingQty = 0;
+    let originalBuyQty = 0;
+    
+    let soldTracker = totalSold;
+
+    for (const b of buyTrades) {
+      let bQty = b.quantity;
+      originalBuyQty += bQty;
+      
+      if (soldTracker > 0) {
+        if (soldTracker >= bQty) {
+          soldTracker -= bQty;
+          continue;
+        } else {
+          bQty -= soldTracker;
+          soldTracker = 0;
+        }
+      }
+      
+      remainingQty += bQty;
+      remainingCostNative += bQty * b.price;
+      remainingCostCNY += bQty * b.price * (b.rate_to_cny || 1);
+    }
+
+    if (remainingQty > 0) {
+      const newOpenPrice = remainingCostNative / remainingQty;
+      const newRateToCNY = remainingCostNative > 0 ? remainingCostCNY / remainingCostNative : 1;
+      const newCommission = totalBuyCommission * (remainingQty / originalBuyQty);
+      
+      await env.DB.prepare(
+        `UPDATE positions 
+         SET quantity = ?1, open_price = ?2, open_rate_to_cny = ?3, commission = ?4, status = 'OPEN', updated_at = datetime('now')
+         WHERE id = ?5`
+      ).bind(remainingQty, newOpenPrice, newRateToCNY, newCommission, positionId).run();
+    } else {
+      await env.DB.prepare(
+        `UPDATE positions 
+         SET quantity = ?1, status = 'CLOSED', updated_at = datetime('now')
+         WHERE id = ?2`
+      ).bind(0, positionId).run();
+    }
+  }
+
   return Response.json(
     { success: true, data: updated },
     { status: 200 },

@@ -57,7 +57,7 @@ export async function renderTradesPage(container) {
             <thead>
               <tr>
                 <th class="table__th">交易日期</th>
-                <th class="table__th">名称/代码</th>
+                <th class="table__th" style="min-width: 160px;">名称/代码</th>
                 <th class="table__th">市场</th>
                 <th class="table__th">类型</th>
                 <th class="table__th table__th--right">成交价</th>
@@ -224,7 +224,7 @@ async function loadTrades() {
         <tr class="table__row table__row--hoverable">
           <td class="table__td table__td--mono">${trade.trade_date}</td>
           <td class="table__td">
-            <div style="font-weight:600">${trade.name}</div>
+            <div style="font-weight:600; max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${trade.name}">${trade.name}</div>
             <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${trade.symbol}</div>
           </td>
           <td class="table__td" title="${m.label || trade.market}">
