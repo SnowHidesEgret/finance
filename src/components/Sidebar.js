@@ -25,7 +25,7 @@ export function renderSidebar(container) {
   
   const navHTML = NAV_ITEMS.map(item => {
     const isActive = currentPath === item.route || 
-      (item.route !== '/' && currentPath.startsWith(item.route));
+      (item.route !== '/' && currentPath.startsWith(item.route + '/'));
     
     return `
       <button class="sidebar__item ${isActive ? 'sidebar__item--active' : ''}" 

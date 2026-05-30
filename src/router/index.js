@@ -157,7 +157,7 @@ async function handleRoute() {
 function updateActiveNav(path) {
   document.querySelectorAll('[data-route]').forEach(el => {
     const route = el.getAttribute('data-route');
-    const isActive = path === route || (route !== '/' && path.startsWith(route));
+    const isActive = path === route || (route !== '/' && path.startsWith(route + '/'));
     el.classList.toggle('sidebar__item--active', isActive);
   });
 }

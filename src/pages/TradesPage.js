@@ -4,7 +4,9 @@
 
 import { formatQuantity, getPnLClass } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
-import { get } from '../services/api.js';
+import { get, put } from '../services/api.js';
+
+let currentTrades = [];
 
 /** 货币 → 前缀符号 */
 const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
@@ -63,12 +65,47 @@ export async function renderTradesPage(container) {
                 <th class="table__th table__th--right">总金额</th>
                 <th class="table__th table__th--right">手续费</th>
                 <th class="table__th table__th--right">实现盈亏</th>
+                <th class="table__th table__th--center">操作</th>
               </tr>
             </thead>
             <tbody id="trades-tbody">
-              <tr><td colspan="9" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="10" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 修改交易记录 Modal -->
+      <div id="edit-trade-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="card animate-fade-in-up" style="width:400px; max-width:90%;">
+          <h3 style="margin-top:0; margin-bottom:16px;">修改交易记录</h3>
+          <form id="edit-trade-form">
+            <input type="hidden" id="edit-trade-id">
+            <div class="form-group">
+              <label class="form-label">成交价</label>
+              <input type="number" step="0.0001" id="edit-trade-price" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">数量</label>
+              <input type="number" step="0.001" id="edit-trade-quantity" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">手续费</label>
+              <input type="number" step="0.01" id="edit-trade-commission" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">交易日期</label>
+              <input type="date" id="edit-trade-date" class="input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">备注</label>
+              <textarea id="edit-trade-notes" class="textarea" rows="2"></textarea>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:24px;">
+              <button type="button" id="btn-cancel-edit" class="btn btn--ghost">取消</button>
+              <button type="submit" id="btn-save-edit" class="btn btn--primary">保存</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -76,6 +113,57 @@ export async function renderTradesPage(container) {
 
   await loadTrades();
 
+  container.querySelector('#trades-tbody')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-edit-trade');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const trade = currentTrades.find(t => t.id === id);
+    if (!trade) return;
+
+    document.getElementById('edit-trade-id').value = trade.id;
+    document.getElementById('edit-trade-price').value = trade.price;
+    document.getElementById('edit-trade-quantity').value = trade.quantity;
+    document.getElementById('edit-trade-commission').value = trade.commission || 0;
+    document.getElementById('edit-trade-date').value = trade.trade_date;
+    document.getElementById('edit-trade-notes').value = trade.notes || '';
+
+    const modal = document.getElementById('edit-trade-modal');
+    if (modal) {
+      modal.style.display = 'flex';
+    }
+  });
+
+  container.querySelector('#btn-cancel-edit')?.addEventListener('click', () => {
+    document.getElementById('edit-trade-modal').style.display = 'none';
+  });
+
+  container.querySelector('#edit-trade-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btnSave = document.getElementById('btn-save-edit');
+    const originalText = btnSave.textContent;
+    btnSave.textContent = '保存中...';
+    btnSave.disabled = true;
+
+    try {
+      const id = document.getElementById('edit-trade-id').value;
+      const payload = {
+        price: document.getElementById('edit-trade-price').value,
+        quantity: document.getElementById('edit-trade-quantity').value,
+        commission: document.getElementById('edit-trade-commission').value,
+        trade_date: document.getElementById('edit-trade-date').value,
+        notes: document.getElementById('edit-trade-notes').value
+      };
+
+      await put(`/api/trades/${id}`, payload);
+      document.getElementById('edit-trade-modal').style.display = 'none';
+      await loadTrades();
+    } catch (err) {
+      alert('修改失败: ' + err.message);
+    } finally {
+      btnSave.textContent = originalText;
+      btnSave.disabled = false;
+    }
+  });
   container.querySelector('#btn-search')?.addEventListener('click', loadTrades);
 }
 
@@ -86,7 +174,7 @@ async function loadTrades() {
   const market = document.getElementById('filter-market')?.value || '';
   const type = document.getElementById('filter-type')?.value || '';
 
-  tbody.innerHTML = `<tr><td colspan="8" class="table__empty">加载中...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="10" class="table__empty">加载中...</td></tr>`;
 
   try {
     const params = {};
@@ -103,9 +191,11 @@ async function loadTrades() {
         trades = trades.filter(t => t.trade_type === type);
     }
 
+    currentTrades = trades;
+
     if (trades.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="8" class="table__empty">
+        <tr><td colspan="10" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无交易记录</p>
@@ -150,12 +240,15 @@ async function loadTrades() {
           <td class="table__td table__td--right table__td--mono">${fmtNative(totalValue, currency)}</td>
           <td class="table__td table__td--right table__td--mono">${fmtNative(trade.commission, currency)}</td>
           <td class="table__td table__td--right table__td--mono">${pnlDisplay}</td>
+          <td class="table__td table__td--center">
+            <button class="btn btn--ghost btn-edit-trade" data-id="${trade.id}" style="padding: 4px 8px; font-size: 0.75rem;">修改</button>
+          </td>
         </tr>
       `;
     }).join('');
 
   } catch (error) {
     console.error('Failed to load trades', error);
-    tbody.innerHTML = `<tr><td colspan="8" class="table__empty">加载失败: ${error.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="table__empty">加载失败: ${error.message}</td></tr>`;
   }
 }
