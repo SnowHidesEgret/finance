@@ -31,7 +31,7 @@ export async function renderDashboardPage(container) {
         <div class="kpi-card kpi-card--total animate-fade-in-up delay-1" id="kpi-total-value">
           <div class="kpi-card__icon">💰</div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">总资产 (CNY)</div>
+            <div class="kpi-card__label">持仓资产 (CNY)</div>
             <div class="kpi-card__value" id="val-total-value">--</div>
             <div class="kpi-card__sparkline" id="sparkline-value"></div>
           </div>
@@ -52,10 +52,10 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__sub" id="val-day-pnl-pct">--</div>
           </div>
         </div>
-        <div class="kpi-card kpi-card--cost animate-fade-in-up delay-4" id="kpi-total-cost">
+        <div class="kpi-card kpi-card--cost animate-fade-in-up delay-4" id="kpi-total-cost" style="cursor:pointer;" title="点击查看本金分布">
           <div class="kpi-card__icon">🏦</div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">总投入本金</div>
+            <div class="kpi-card__label">本金</div>
             <div class="kpi-card__value" id="val-total-cost">--</div>
             <div class="kpi-card__sub" id="val-position-count">-- 笔持仓</div>
           </div>
@@ -171,6 +171,14 @@ export async function renderDashboardPage(container) {
   if (dayPnlCard) {
     dayPnlCard.addEventListener('click', () => {
       showDayPnLModal(cachedPositions);
+    });
+  }
+  
+  // 绑定本金点击事件
+  const costCard = container.querySelector('#kpi-total-cost');
+  if (costCard) {
+    costCard.addEventListener('click', () => {
+      showCostModal(cachedPositions);
     });
   }
   
@@ -873,6 +881,62 @@ function showMarketPositionsModal(marketId, positions) {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
+/**
+ * 显示本金分布弹窗
+ */
+async function showCostModal(positions) {
+  document.getElementById('cost-modal')?.remove();
 
+  const overlay = document.createElement('div');
+  overlay.id = 'cost-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
 
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:800px; max-width:95vw; 
+      box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+          🏦 本金分布 (CNY)
+        </h3>
+        <button id="close-cost-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+      </div>
+      
+      <div id="cost-chart-container" style="height: 400px; width: 100%;"></div>
+    </div>
+  `;
 
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-cost-modal').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // 准备图表数据
+  const openPositions = positions.filter(p => p.status === 'OPEN' || !p.status);
+  const chartData = openPositions.map(p => {
+    // 尽量获取已计算好的成本(CNY)，如果没有则估算
+    let cost = p.costCNY || p.cost_cny;
+    if (cost === undefined) {
+      const rateToCNY = p.rateToCNY || p.currentRate || 1;
+      cost = (p.open_price * p.quantity) * rateToCNY;
+    }
+    return { name: p.name, cost: cost };
+  }).sort((a, b) => b.cost - a.cost);
+
+  // 加载并渲染图表
+  try {
+    const { renderCostBar } = await import('../charts/costBar.js');
+    const container = document.getElementById('cost-chart-container');
+    if (container) {
+      renderCostBar(container, chartData);
+    }
+  } catch (err) {
+    console.error('Failed to load costBar chart:', err);
+  }
+}
