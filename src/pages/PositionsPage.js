@@ -282,6 +282,7 @@ export async function renderPositionsPage(container) {
                 <th class="table__th table__th--right">当前市值</th>
                 <th class="table__th table__th--right">浮动盈亏</th>
                 <th class="table__th table__th--right">收益率</th>
+                <th class="table__th table__th--right" title="Year-To-Date 年内收益率">YTD</th>
                 <th class="table__th table__th--right">持仓天数</th>
                 <th class="table__th table__th--right">年化收益</th>
                 <th class="table__th table__th--right">状态</th>
@@ -289,7 +290,7 @@ export async function renderPositionsPage(container) {
               </tr>
             </thead>
             <tbody id="full-positions-tbody">
-              <tr><td colspan="13" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="14" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -322,7 +323,7 @@ async function loadPositions() {
   const market = document.getElementById('filter-market')?.value || '';
   const status = document.getElementById('filter-status')?.value || 'OPEN';
 
-  tbody.innerHTML = `<tr><td colspan="13" class="table__empty">加载中...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="14" class="table__empty">加载中...</td></tr>`;
 
   try {
     const params = {};
@@ -339,7 +340,7 @@ async function loadPositions() {
 
     if (positions.length === 0) {
       tbody.innerHTML = `
-        <tr><td colspan="13" class="table__empty">
+        <tr><td colspan="14" class="table__empty">
           <div class="empty-state">
             <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <p class="empty-state__text">暂无数据</p>
@@ -402,6 +403,11 @@ async function loadPositions() {
         ? fmtNative(currentPrice, currency)
         : `<span style="color:var(--color-text-muted)" title="未获取到实时行情，显示开仓价">${fmtNative(currentPrice, currency)} <small>*</small></span>`;
 
+      let ytdDisplay = `<span style="color:var(--color-text-muted)">-</span>`;
+      if (!isClosed && live?.ytdPercent !== undefined) {
+        ytdDisplay = `<span class="table__td--${getPnLClass(live.ytdPercent)}">${formatPercent(live.ytdPercent)}</span>`;
+      }
+
       return `
         <tr class="table__row table__row--hoverable" data-id="${pos.id}">
           <td class="table__td">
@@ -421,6 +427,9 @@ async function loadPositions() {
           </td>
           <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
             ${formatPercent(pnlPct)}
+          </td>
+          <td class="table__td table__td--right">
+            ${ytdDisplay}
           </td>
           <td class="table__td table__td--right table__td--mono" title="持仓天数">
             ${holdingDays}天

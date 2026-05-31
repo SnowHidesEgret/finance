@@ -121,32 +121,80 @@ export async function onRequestGet(context) {
     tradesByPosition[t.position_id].push(t);
   }
 
-  // ── 3. Fetch live quotes for all symbols in parallel ─────────────────
+/**
+ * Fetch YTD price from Yahoo Finance chart API.
+ */
+async function fetchYtdPrice(yfSymbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=ytd`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || meta.chartPreviousClose == null) return null;
+    return meta.chartPreviousClose;
+  } catch {
+    return null;
+  }
+}
+
+  // ── 3. Fetch live quotes & YTD prices in parallel ─────────────────
   // Deduplicate symbols
   const uniqueSymbols = [...new Set(positions.map(p => p.symbol))];
+  
+  // Pre-load ytd_price from cache
+  let cachedYtdMap = new Map();
+  if (uniqueSymbols.length > 0) {
+    const symbolsList = uniqueSymbols.map(s => `'${s}'`).join(',');
+    try {
+      const { results: cachedQuotes } = await env.DB.prepare(
+        `SELECT symbol, ytd_price FROM quote_cache WHERE symbol IN (${symbolsList})`
+      ).all();
+      for (const row of cachedQuotes || []) {
+        if (row.ytd_price != null) cachedYtdMap.set(row.symbol, row.ytd_price);
+      }
+    } catch (e) {
+      console.warn('[summary] Failed to read quote_cache:', e.message);
+    }
+  }
+
   const quoteResults = await Promise.all(
     uniqueSymbols.map(async (sym) => {
       const yfSym = toYahooSymbol(sym);
-      const quote = await fetchYahooQuote(yfSym);
-      return { sym, yfSym, quote };
+      const quotePromise = fetchYahooQuote(yfSym);
+      let ytdPricePromise = Promise.resolve(cachedYtdMap.get(sym.toUpperCase()));
+      
+      if (!cachedYtdMap.has(sym.toUpperCase())) {
+        ytdPricePromise = fetchYtdPrice(yfSym);
+      }
+      
+      const [quote, ytdPrice] = await Promise.all([quotePromise, ytdPricePromise]);
+      return { sym, yfSym, quote, ytdPrice };
     })
   );
 
   // Build quote map: original_symbol → quote data
   const quoteMap = new Map();
-  for (const { sym, yfSym, quote } of quoteResults) {
+  for (const { sym, yfSym, quote, ytdPrice } of quoteResults) {
     if (quote) {
+      quote.ytdPrice = ytdPrice;
       quoteMap.set(sym.toUpperCase(), quote);
       // Also save to quote_cache for other endpoints (fire and forget)
       try {
         await env.DB.prepare(
-          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, currency, updated_at)
-           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, datetime('now'))
+          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, currency, updated_at)
+           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, datetime('now'))
            ON CONFLICT(symbol) DO UPDATE SET
              price = excluded.price,
              change_amount = excluded.change_amount,
              change_percent = excluded.change_percent,
              prev_close = excluded.prev_close,
+             ytd_price = excluded.ytd_price,
              currency = excluded.currency,
              updated_at = datetime('now')`,
         ).bind(
@@ -155,6 +203,7 @@ export async function onRequestGet(context) {
           round2(quote.price - quote.prevClose),
           quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
           quote.prevClose,
+          ytdPrice,
           quote.currency,
         ).run();
       } catch (e) {
@@ -179,6 +228,7 @@ export async function onRequestGet(context) {
     const liveQuote   = quoteMap.get(p.symbol?.toUpperCase());
     const currentPrice = liveQuote?.price ?? p.open_price;
     const prevClose    = liveQuote?.prevClose ?? p.open_price;
+    const ytdPrice     = liveQuote?.ytdPrice; // Dec 31 of last year
     const hasLivePrice = !!liveQuote;
 
     // Cost in original currency (open_price is in the position's own currency)
@@ -191,6 +241,21 @@ export async function onRequestGet(context) {
 
     const pnlCNY         = round2(valueCNY - costCNY);
     const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
+    
+    // YTD Calculation for the position
+    // If the position was opened this year, the YTD return is simply the return since purchase (open_price).
+    // If opened before this year, we use the stock's last year end price (ytdPrice) as the baseline.
+    let ytdPercent = 0;
+    const currentYear = new Date().getFullYear();
+    const openYear = new Date(p.open_date).getFullYear();
+    
+    if (openYear === currentYear) {
+      // Bought this year -> YTD is just the total return since purchase (unrealized return)
+      ytdPercent = p.open_price > 0 ? round2(((currentPrice - p.open_price) / p.open_price) * 100) : 0;
+    } else if (ytdPrice && ytdPrice > 0) {
+      // Bought before this year -> YTD is based on last year's close
+      ytdPercent = round2(((currentPrice - ytdPrice) / ytdPrice) * 100);
+    }
 
     // Lot-level calculation for accurate return rates
     const pTrades = tradesByPosition[p.id] || [];
@@ -289,6 +354,8 @@ export async function onRequestGet(context) {
       currency,
       currentPrice,
       prevClose,
+      ytdPrice,
+      ytdPercent,
       rateToCNY,
       costCNY,
       marketValueCNY: valueCNY,
