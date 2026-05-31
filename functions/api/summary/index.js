@@ -242,21 +242,6 @@ async function fetchYtdPrice(yfSymbol) {
     const pnlCNY         = round2(valueCNY - costCNY);
     const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
     
-    // YTD Calculation for the position
-    // If the position was opened this year, the YTD return is simply the return since purchase (open_price).
-    // If opened before this year, we use the stock's last year end price (ytdPrice) as the baseline.
-    let ytdPercent = 0;
-    const currentYear = new Date().getFullYear();
-    const openYear = new Date(p.open_date).getFullYear();
-    
-    if (openYear === currentYear) {
-      // Bought this year -> YTD is just the total return since purchase (unrealized return)
-      ytdPercent = p.open_price > 0 ? round2(((currentPrice - p.open_price) / p.open_price) * 100) : 0;
-    } else if (ytdPrice && ytdPrice > 0) {
-      // Bought before this year -> YTD is based on last year's close
-      ytdPercent = round2(((currentPrice - ytdPrice) / ytdPrice) * 100);
-    }
-
     // Lot-level calculation for accurate return rates
     const pTrades = tradesByPosition[p.id] || [];
     let priorSold = 0;
@@ -285,7 +270,11 @@ async function fetchYtdPrice(yfSymbol) {
     let weightedHoldingDays = 0;
     let lotTotalCostCNY = 0;
     const nowMs = Date.now();
+    const currentYear = new Date().getFullYear();
     const processedLots = [];
+    
+    let totalYtdPnLNative = 0;
+    let totalYtdBaseNative = 0;
     
     for (const lot of activeLots) {
       const lotDays = Math.max(1, Math.floor((nowMs - new Date(lot.trade_date).getTime()) / (1000 * 60 * 60 * 24)));
@@ -297,6 +286,19 @@ async function fetchYtdPrice(yfSymbol) {
       const lotPnlPercent = lotCostNative > 0 ? (lotPnLNative / lotCostNative) * 100 : 0;
       const lotAnnualizedReturn = lotDays > 0 ? (lotPnlPercent / lotDays) * 365 : 0;
       
+      // Lot YTD calculation
+      const lotYear = new Date(lot.trade_date).getFullYear();
+      let lotYtdBasePrice = lot.price; // default to purchase price if bought this year
+      if (lotYear < currentYear && ytdPrice && ytdPrice > 0) {
+        lotYtdBasePrice = ytdPrice; // use last year close if bought before this year
+      }
+      
+      const lotYtdBaseNative = lot.activeQuantity * lotYtdBasePrice;
+      const lotYtdPnLNative = lotValueNative - lotYtdBaseNative;
+      
+      totalYtdBaseNative += lotYtdBaseNative;
+      totalYtdPnLNative += lotYtdPnLNative;
+      
       processedLots.push({
         ...lot,
         holdingDays: lotDays,
@@ -304,12 +306,15 @@ async function fetchYtdPrice(yfSymbol) {
         valueNative: round2(lotValueNative),
         pnlNative: round2(lotPnLNative),
         pnlPercent: round2(lotPnlPercent),
-        annualizedReturn: round2(lotAnnualizedReturn)
+        annualizedReturn: round2(lotAnnualizedReturn),
+        ytdPercent: lotYtdBaseNative > 0 ? round2((lotYtdPnLNative / lotYtdBaseNative) * 100) : 0
       });
       
       weightedHoldingDays += lotDays * lotCostCNYValue;
       lotTotalCostCNY += lotCostCNYValue;
     }
+    
+    const ytdPercent = totalYtdBaseNative > 0 ? round2((totalYtdPnLNative / totalYtdBaseNative) * 100) : 0;
     
     // Find the earliest trade date among ALL buy trades for this continuous position
     let earliestDate = p.open_date;
