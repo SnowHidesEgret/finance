@@ -2,6 +2,7 @@
  * StockVault — 导入导出页
  */
 import { generateTemplateCSV, parseFile, validateAndTransform, autoMapFields } from '../services/importer.js';
+import { exportPositionsCSV, exportTradesCSV } from '../services/exporter.js';
 import { post } from '../services/api.js';
 import { navigate } from '../router/index.js';
 
@@ -39,9 +40,31 @@ export async function renderImportExportPage(container) {
           </p>
           
           <div style="display:flex; gap:12px;">
-            <button class="btn btn--ghost" onclick="alert('即将支持导出功能')">导出当前持仓</button>
-            <button class="btn btn--ghost" onclick="alert('即将支持导出功能')">导出所有交易记录</button>
+            <button class="btn btn--ghost" id="btn-export-positions">导出当前持仓</button>
+            <button class="btn btn--ghost" id="btn-export-trades">导出交易记录</button>
           </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 导出交易记录弹窗 -->
+    <div id="export-trades-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+      <div class="card animate-fade-in-up" style="width:100%; max-width:400px; padding:24px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+        <h3 style="margin-bottom:16px;">选择导出时间范围</h3>
+        <p style="color:var(--color-text-secondary); margin-bottom:20px; font-size:0.875rem;">
+          不选日期则默认导出所有交易记录。
+        </p>
+        <div style="margin-bottom:16px;">
+          <label style="display:block; margin-bottom:8px; font-size:0.875rem; color:var(--color-text-secondary);">开始日期</label>
+          <input type="date" id="modal-export-from" class="input" style="width:100%;">
+        </div>
+        <div style="margin-bottom:24px;">
+          <label style="display:block; margin-bottom:8px; font-size:0.875rem; color:var(--color-text-secondary);">结束日期</label>
+          <input type="date" id="modal-export-to" class="input" style="width:100%;">
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:12px;">
+          <button class="btn btn--ghost" id="modal-cancel">取消</button>
+          <button class="btn btn--primary" id="modal-confirm-export">确认导出</button>
         </div>
       </div>
     </div>
@@ -101,5 +124,54 @@ export async function renderImportExportPage(container) {
     }
     
     e.target.value = ''; // clear input
+  });
+  
+  container.querySelector('#btn-export-positions').addEventListener('click', async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = '导出中...';
+    try {
+      await exportPositionsCSV();
+    } catch (err) {
+      alert('导出持仓失败: ' + err.message);
+    } finally {
+      btn.textContent = oldText;
+      btn.disabled = false;
+    }
+  });
+
+  const modal = container.querySelector('#export-trades-modal');
+  
+  container.querySelector('#btn-export-trades').addEventListener('click', () => {
+    modal.style.display = 'flex';
+  });
+
+  container.querySelector('#modal-cancel').addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+
+  container.querySelector('#modal-confirm-export').addEventListener('click', async (e) => {
+    const fromDate = container.querySelector('#modal-export-from').value;
+    const toDate = container.querySelector('#modal-export-to').value;
+    
+    if (fromDate && toDate && fromDate > toDate) {
+      alert('开始日期不能晚于结束日期');
+      return;
+    }
+
+    const btn = e.target;
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = '导出中...';
+    try {
+      await exportTradesCSV(fromDate || undefined, toDate || undefined);
+      modal.style.display = 'none'; // 导出成功后关闭弹窗
+    } catch (err) {
+      alert('导出交易记录失败: ' + err.message);
+    } finally {
+      btn.textContent = oldText;
+      btn.disabled = false;
+    }
   });
 }
