@@ -153,3 +153,107 @@ export async function onRequestPut(context) {
     { status: 200 },
   );
 }
+
+// ────────────────────────────────────────────────────────────
+// DELETE /api/trades/:id
+// ────────────────────────────────────────────────────────────
+
+export async function onRequestDelete(context) {
+  const { env, params } = context;
+  const id = params.id;
+
+  if (!id) {
+    return Response.json(
+      { success: false, error: 'Missing trade ID' },
+      { status: 400 },
+    );
+  }
+
+  const existing = await env.DB.prepare('SELECT * FROM trades WHERE id = ?1')
+    .bind(id)
+    .first();
+
+  if (!existing) {
+    return Response.json(
+      { success: false, error: `Trade not found: ${id}` },
+      { status: 404 },
+    );
+  }
+
+  await env.DB.prepare('DELETE FROM trades WHERE id = ?1').bind(id).run();
+
+  // Recalculate position if position_id is set
+  if (existing.position_id) {
+    const positionId = existing.position_id;
+    
+    const { results: allTrades } = await env.DB.prepare(
+      'SELECT trade_type, quantity, price, rate_to_cny, commission FROM trades WHERE position_id = ?1 ORDER BY trade_date ASC, created_at ASC'
+    ).bind(positionId).all();
+
+    let totalSold = 0;
+    const buyTrades = [];
+    let totalBuyCommission = 0;
+    
+    for (const t of (allTrades || [])) {
+      if (t.trade_type === 'SELL') {
+        totalSold += t.quantity;
+      } else if (t.trade_type === 'BUY') {
+        buyTrades.push(t);
+        totalBuyCommission += (t.commission || 0);
+      }
+    }
+
+    let remainingCostNative = 0;
+    let remainingCostCNY = 0;
+    let remainingQty = 0;
+    let originalBuyQty = 0;
+    
+    let soldTracker = totalSold;
+
+    for (const b of buyTrades) {
+      let bQty = b.quantity;
+      originalBuyQty += bQty;
+      
+      if (soldTracker > 0) {
+        if (soldTracker >= bQty) {
+          soldTracker -= bQty;
+          continue;
+        } else {
+          bQty -= soldTracker;
+          soldTracker = 0;
+        }
+      }
+      
+      remainingQty += bQty;
+      remainingCostNative += bQty * b.price;
+      remainingCostCNY += bQty * b.price * (b.rate_to_cny || 1);
+    }
+
+    const posExists = await env.DB.prepare('SELECT id FROM positions WHERE id = ?1').bind(positionId).first();
+
+    if (posExists) {
+      if (remainingQty > 0) {
+        const newOpenPrice = remainingCostNative / remainingQty;
+        const newRateToCNY = remainingCostNative > 0 ? remainingCostCNY / remainingCostNative : 1;
+        const newCommission = originalBuyQty > 0 ? totalBuyCommission * (remainingQty / originalBuyQty) : 0;
+        
+        await env.DB.prepare(
+          `UPDATE positions 
+           SET quantity = ?1, open_price = ?2, open_rate_to_cny = ?3, commission = ?4, status = 'OPEN',
+               close_date = NULL, close_price = NULL, close_rate_to_cny = NULL, close_commission = 0,
+               updated_at = datetime('now')
+           WHERE id = ?5`
+        ).bind(remainingQty, newOpenPrice, newRateToCNY, newCommission, positionId).run();
+      } else {
+        await env.DB.prepare(
+          `UPDATE positions 
+           SET quantity = ?1, status = 'CLOSED', updated_at = datetime('now')
+           WHERE id = ?2`
+        ).bind(0, positionId).run();
+      }
+    }
+  }
+
+  return Response.json({ success: true, data: { deleted: id } });
+}
+

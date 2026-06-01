@@ -4,7 +4,7 @@
 
 import { formatQuantity, getPnLClass } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
-import { get, put } from '../services/api.js';
+import { get, put, del } from '../services/api.js';
 
 let currentTrades = [];
 
@@ -108,6 +108,21 @@ export async function renderTradesPage(container) {
           </form>
         </div>
       </div>
+
+      <!-- 删除交易记录 Modal -->
+      <div id="delete-trade-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+        <div class="card animate-fade-in-up" style="width:400px; max-width:90%;">
+          <div style="display:flex; justify-content:center; margin-bottom:16px; color:#ef4444;"><i data-lucide="trash-2" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
+          <h3 style="margin:0 0 8px;text-align:center;font-size:1.1rem;">确认删除交易记录</h3>
+          <p id="delete-trade-msg" style="margin:0 0 24px;text-align:center;color:var(--color-text-secondary,#9ca3af);font-size:0.9rem;">
+            是否确认删除该条交易记录？
+          </p>
+          <div style="display:flex; justify-content:center; gap:12px;">
+            <button id="btn-cancel-delete" class="btn btn--ghost">取消</button>
+            <button id="btn-confirm-delete" class="btn" style="background:#ef4444;color:#fff;border:none;">确认删除</button>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -164,6 +179,51 @@ export async function renderTradesPage(container) {
       btnSave.disabled = false;
     }
   });
+
+  let deleteTradeId = null;
+  container.querySelector('#trades-tbody')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-trade');
+    if (!btn) return;
+    deleteTradeId = btn.dataset.id;
+    const tradeType = btn.dataset.type;
+    const msgEl = document.getElementById('delete-trade-msg');
+    if (tradeType === 'SELL') {
+      msgEl.textContent = '此操作会删除该平仓（卖出）记录，相应的持仓数量及成本将会自动恢复，如果已经完全平仓，状态将恢复为持仓中。是否确认删除？';
+    } else {
+      msgEl.textContent = '是否确认删除该条（买入）交易记录？这将重新计算对应持仓的成本。';
+    }
+    document.getElementById('delete-trade-modal').style.display = 'flex';
+    
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+  });
+
+  container.querySelector('#btn-cancel-delete')?.addEventListener('click', () => {
+    document.getElementById('delete-trade-modal').style.display = 'none';
+    deleteTradeId = null;
+  });
+
+  container.querySelector('#btn-confirm-delete')?.addEventListener('click', async () => {
+    if (!deleteTradeId) return;
+    const btnConfirm = document.getElementById('btn-confirm-delete');
+    const originalText = btnConfirm.textContent;
+    btnConfirm.textContent = '删除中...';
+    btnConfirm.disabled = true;
+
+    try {
+      await del(`/api/trades/${deleteTradeId}`);
+      document.getElementById('delete-trade-modal').style.display = 'none';
+      await loadTrades();
+    } catch (err) {
+      alert('删除失败: ' + err.message);
+    } finally {
+      btnConfirm.textContent = originalText;
+      btnConfirm.disabled = false;
+      deleteTradeId = null;
+    }
+  });
+
   container.querySelector('#btn-search')?.addEventListener('click', loadTrades);
 }
 
@@ -241,7 +301,10 @@ async function loadTrades() {
           <td class="table__td table__td--right table__td--mono">${fmtNative(trade.commission, currency)}</td>
           <td class="table__td table__td--right table__td--mono">${pnlDisplay}</td>
           <td class="table__td table__td--center">
-            <button class="btn btn--ghost btn-edit-trade" data-id="${trade.id}" style="padding: 4px 8px; font-size: 0.75rem;">修改</button>
+            <div style="display:flex; gap:8px; justify-content:center;">
+              <button class="btn btn--ghost btn-edit-trade" data-id="${trade.id}" style="padding: 4px 8px; font-size: 0.75rem;">修改</button>
+              <button class="btn btn--ghost btn-delete-trade" data-id="${trade.id}" data-type="${trade.trade_type}" style="padding: 4px 8px; font-size: 0.75rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">删除</button>
+            </div>
           </td>
         </tr>
       `;

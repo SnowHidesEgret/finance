@@ -316,7 +316,13 @@ function updateKPICards(data) {
   
   const dayPnlEl = document.getElementById('val-day-pnl');
   if (dayPnlEl) {
-    dayPnlEl.textContent = formatCurrency(dayPnl, 'CNY', true);
+    if (dayPnl == null || isNaN(dayPnl)) {
+      dayPnlEl.textContent = '--';
+    } else {
+      const dayPnlWan = Math.abs(dayPnl) / 10000;
+      const sign = dayPnl > 0 ? '+' : (dayPnl < 0 ? '-' : '');
+      dayPnlEl.textContent = `${sign}¥${dayPnlWan.toFixed(2)}万`;
+    }
     dayPnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(dayPnl)}`;
   }
   
@@ -702,7 +708,7 @@ function showEmptyState() {
 /**
  * 显示今日盈亏明细弹窗
  */
-function showDayPnLModal(positions) {
+async function showDayPnLModal(positions) {
   document.getElementById('day-pnl-modal')?.remove();
 
   const overlay = document.createElement('div');
@@ -721,80 +727,34 @@ function showDayPnLModal(positions) {
     return valB - valA; // desc
   });
 
+  const totalDayPnL = openPositions.reduce((sum, p) => sum + (p.dayPnLCNY || p.day_pnl_cny || 0), 0);
+  
   const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
-  function fmtNative(amount, currency) {
+  
+  function fmtExactPnL(amount, currency) {
     const sym = CURRENCY_SYMBOL[currency] || '';
     const num = Number(amount);
     const absNum = Math.abs(num);
     const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     if (num < 0) return `-${sym}${formattedAbs}`;
+    if (num > 0) return `+${sym}${formattedAbs}`;
     return `${sym}${formattedAbs}`;
   }
-
-  const rowsHtml = sorted.length === 0 
-    ? `<tr><td colspan="5" class="table__empty">暂无持仓</td></tr>`
-    : sorted.map(pos => {
-        const market = MARKETS[pos.market] || {};
-        const currency = pos.currency || market.currency || 'CNY';
-        const dayPnl = pos.dayPnLCNY || pos.day_pnl_cny || 0;
-        const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
-
-        const isOpen = isMarketOpen(pos.market);
-        const statusIndicator = isOpen 
-          ? `<span style="color:#10b981; display:inline-flex; align-items:center;" title="开盘中"><i data-lucide="activity" style="width:14px; height:14px;"></i></span>` 
-          : `<span style="color:#64748b; display:inline-flex; align-items:center;" title="休市"><i data-lucide="moon" style="width:14px; height:14px;"></i></span>`;
-
-        return `
-          <tr class="table__row table__row--hoverable">
-            <td class="table__td">
-              <div style="font-weight:600">${pos.name}</div>
-              <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
-            </td>
-            <td class="table__td" title="${market.label || pos.market}" style="text-align: center;">
-              ${market.flag || ''}
-            </td>
-            <td class="table__td" style="text-align: center;">
-              ${statusIndicator}
-            </td>
-            <td class="table__td table__td--right table__td--mono">
-              ${fmtNative(currentPrice, currency)}
-            </td>
-            <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(dayPnl)}">
-              ${formatCurrency(dayPnl, 'CNY', true)}
-            </td>
-          </tr>
-        `;
-      }).join('');
 
   overlay.innerHTML = `
     <div style="
       background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
-      border-radius:20px; padding:24px; width:max-content; min-width:60%; max-width:95vw; 
-      box-shadow:var(--shadow-lg); max-height:80vh; display:flex; flex-direction:column;
+      border-radius:20px; padding:24px; width:800px; max-width:95vw; 
+      box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
-          📊 今日盈亏明细
+          📊 今日盈亏总额：<span class="market-summary-card__stat-value--${getPnLClass(totalDayPnL)}">${fmtExactPnL(totalDayPnL, 'CNY')}</span>
         </h3>
         <button id="close-day-pnl" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
       </div>
       
-      <div class="table-wrapper" style="flex:1; overflow-y:auto; border-radius:12px;">
-        <table class="table" style="width:100%;">
-          <thead style="position:sticky; top:0; background:var(--color-bg-card); z-index:10;">
-            <tr>
-              <th class="table__th">股票</th>
-              <th class="table__th" style="text-align:center;">市场</th>
-              <th class="table__th" style="text-align:center;">状态</th>
-              <th class="table__th table__th--right">现价</th>
-              <th class="table__th table__th--right">今日盈亏(¥)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-          </tbody>
-        </table>
-      </div>
+      <div id="day-pnl-chart-container" style="height: 400px; width: 100%;"></div>
     </div>
   `;
 
@@ -802,6 +762,26 @@ function showDayPnLModal(positions) {
 
   overlay.querySelector('#close-day-pnl').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // 准备图表数据
+  const chartData = sorted.map(p => {
+    const dayPnl = p.dayPnLCNY || p.day_pnl_cny || 0;
+    const marketValueCNY = p.marketValueCNY || p.valueCNY || 0;
+    const prevValueCNY = marketValueCNY - dayPnl;
+    const pnlPercent = prevValueCNY > 0 ? (dayPnl / prevValueCNY) * 100 : (prevValueCNY < 0 ? (dayPnl / Math.abs(prevValueCNY)) * 100 : 0);
+    return { name: p.name, pnl: dayPnl, pnlPercent: pnlPercent };
+  });
+
+  // 加载并渲染图表
+  try {
+    const { renderPnLBar } = await import('../charts/pnlBar.js');
+    const container = overlay.querySelector('#day-pnl-chart-container');
+    if (container) {
+      renderPnLBar(container, chartData);
+    }
+  } catch (err) {
+    console.error('Failed to load pnlBar chart:', err);
+  }
 }
 
 /**
