@@ -1161,8 +1161,8 @@ function showYtdModal(marketSummaries) {
         <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(ytdPnl)}">
           ${formatCurrency(ytdPnl, 'CNY', true)}
         </td>
-        <td class="table__td table__td--right table__td--${getPnLClass(data.pnlPercent || 0)}">
-          ${formatPercent(data.pnlPercent || 0)}
+        <td class="table__td table__td--right table__td--${getPnLClass(data.ytdPercent || 0)}">
+          ${formatPercent(data.ytdPercent || 0)}
         </td>
       </tr>
     `;
@@ -1192,7 +1192,7 @@ function showYtdModal(marketSummaries) {
               <th class="table__th table__th--right">持仓</th>
               <th class="table__th table__th--right">总市值(CNY)</th>
               <th class="table__th table__th--right">YTD 收益(CNY)</th>
-              <th class="table__th table__th--right">总收益率</th>
+              <th class="table__th table__th--right">YTD 收益率</th>
             </tr>
           </thead>
           <tbody>

@@ -443,6 +443,8 @@ async function fetchYtdPrice(yfSymbol) {
   const markets = {};
   for (const [mkt, data] of Object.entries(marketBreakdown)) {
     const mktPnlPct = data.cost !== 0 ? round2((data.pnl / data.cost) * 100) : 0;
+    const mktYearStartValue = data.value - data.ytdPnl;
+    const ytdPercent = mktYearStartValue > 0 ? round2((data.ytdPnl / mktYearStartValue) * 100) : 0;
     const avgDays   = data.value > 0 ? Math.max(1, Math.round(data.weightedDays / data.value)) : 1;
     markets[mkt] = {
       totalValue:       round2(data.value),
@@ -458,6 +460,7 @@ async function fetchYtdPrice(yfSymbol) {
       positionCount:    data.count,
       dayPnL:           round2(data.dayPnl),
       ytdPnlCNY:        round2(data.ytdPnl),
+      ytdPercent:       ytdPercent,
     };
   }
 
