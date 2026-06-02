@@ -106,15 +106,6 @@ export async function renderDashboardPage(container) {
             <div class="chart-container__body" id="chart-pnl-bar" style="height:320px"></div>
           </div>
         </div>
-        <div class="dashboard__charts-row" style="margin-top:20px;">
-          <div class="chart-container" style="width:100%;">
-            <div class="chart-container__header">
-              <h3 class="chart-container__title">资产走势</h3>
-              <span class="chart-container__hint">基于每日快照数据，持续使用自动积累</span>
-            </div>
-            <div class="chart-container__body" id="chart-asset-trend" style="height:300px"></div>
-          </div>
-        </div>
       </section>
 
       <!-- 持仓速览表 -->
@@ -266,16 +257,6 @@ async function loadDashboardData(container) {
         updateMarketOverview(cachedMarketSummaries);
         updatePositionTable(quoteData.positions || positionList, rates);
         updateCharts(quoteData, positionList, rates);
-        
-        // Load snapshots for asset trend chart (non-blocking)
-        get('/api/snapshots', { days: 90, market: 'ALL' }).then(snapshots => {
-          if (snapshots && snapshots.length > 0) {
-            updateAssetTrendChart(snapshots);
-          } else {
-            updateAssetTrendChart([]);
-          }
-        }).catch(() => updateAssetTrendChart([]));
-        
         return;
       }
     } catch (e) {
