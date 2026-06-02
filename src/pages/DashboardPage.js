@@ -53,20 +53,19 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__sub" id="val-day-pnl-pct">--</div>
           </div>
         </div>
-        <div class="kpi-card kpi-card--cost animate-fade-in-up delay-4" id="kpi-total-cost" style="cursor:pointer;" title="点击查看本金分布">
-          <div class="kpi-card__icon">🏦</div>
-          <div class="kpi-card__content">
-            <div class="kpi-card__label">本金</div>
-            <div class="kpi-card__value" id="val-total-cost">--</div>
-            <div class="kpi-card__sub" id="val-position-count">-- 笔持仓</div>
-          </div>
-        </div>
-        <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-ytd" style="cursor:pointer;" title="点击查看各市场 YTD 收益明细">
+        <div class="kpi-card kpi-card--cost animate-fade-in-up delay-4" id="kpi-ytd" style="cursor:pointer;" title="点击查看各市场 YTD 收益明细">
           <div class="kpi-card__icon">📅</div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">YTD 收益</div>
+            <div class="kpi-card__label">YTD 收益 (CNY)</div>
             <div class="kpi-card__value" id="val-ytd-pnl">--</div>
             <div class="kpi-card__sub" id="val-ytd-pct">--</div>
+          </div>
+        </div>
+        <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-return-rates" style="cursor:pointer;" title="点击查看各国市场年化收益率">
+          <div class="kpi-card__icon">🎯</div>
+          <div class="kpi-card__content">
+            <div class="kpi-card__label">年化收益率</div>
+            <div class="kpi-card__value" id="val-annualized-return">--</div>
           </div>
         </div>
       </section>
@@ -192,19 +191,19 @@ export async function renderDashboardPage(container) {
     });
   }
 
-  // 绑定本金点击事件
-  const costCard = container.querySelector('#kpi-total-cost');
-  if (costCard) {
-    costCard.addEventListener('click', () => {
-      showCostModal(cachedPositions);
-    });
-  }
-  
   // 绑定 YTD 点击事件
   const ytdCard = container.querySelector('#kpi-ytd');
   if (ytdCard) {
     ytdCard.addEventListener('click', () => {
       showYtdModal(cachedMarketSummaries);
+    });
+  }
+  
+  // 绑定收益率点击事件
+  const returnCard = container.querySelector('#kpi-return-rates');
+  if (returnCard) {
+    returnCard.addEventListener('click', () => {
+      showReturnRatesModal(cachedMarketSummaries);
     });
   }
   
@@ -334,11 +333,6 @@ function updateKPICards(data) {
     dayPnlPctEl.className = `kpi-card__sub kpi-card__sub--${getPnLClass(dayPnlPercent)}`;
   }
   
-  animateValue('val-total-cost', totalCost, v => formatCurrency(v));
-  
-  const countEl = document.getElementById('val-position-count');
-  if (countEl) countEl.textContent = `${count} 笔持仓`;
-  
   // YTD 卡片
   const ytdPnl = data.portfolioYtdPnlCNY || 0;
   const ytdPct = data.portfolioYtdPercent || 0;
@@ -352,6 +346,14 @@ function updateKPICards(data) {
   if (ytdPctEl) {
     ytdPctEl.textContent = formatPercent(ytdPct);
     ytdPctEl.className = `kpi-card__sub kpi-card__sub--${getPnLClass(ytdPct)}`;
+  }
+  
+  // 收益率卡片
+  const annualizedReturn = data.totalAnnualizedReturn || 0;
+  const annualEl = document.getElementById('val-annualized-return');
+  if (annualEl) {
+    annualEl.textContent = formatPercent(annualizedReturn);
+    annualEl.className = `kpi-card__value kpi-card__value--${getPnLClass(annualizedReturn)}`;
   }
 }
 
@@ -1054,6 +1056,83 @@ async function showValueModal(positions) {
 
 /**
  * 显示各国市场年化收益率弹窗
+ */
+function showReturnRatesModal(marketSummaries) {
+  document.getElementById('return-rates-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'return-rates-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
+
+  const rowsHtml = MARKET_IDS.map(id => {
+    const data = marketSummaries[id];
+    if (!data || data.positionCount === 0) return '';
+    const market = MARKETS[id];
+    const annualizedReturn = data.annualizedReturn || 0;
+    
+    return `
+      <tr class="table__row">
+        <td class="table__td">
+          <div style="display:flex; align-items:center; gap:8px;">
+            ${market.flag} <span style="font-weight:600">${market.label}</span>
+          </div>
+        </td>
+        <td class="table__td table__td--right">
+          ${data.positionCount} 笔
+        </td>
+        <td class="table__td table__td--right table__td--mono">
+          ${formatCurrency(data.totalValue || 0)}
+        </td>
+        <td class="table__td table__td--right table__td--${getPnLClass(annualizedReturn)}">
+          ${formatPercent(annualizedReturn)}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:max-content; min-width:400px; max-width:95vw; 
+      box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+    ">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+          🎯 各国市场年化收益率
+        </h3>
+        <button id="close-return-rates-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+      </div>
+      
+      <div class="table-wrapper" style="border-radius:12px;">
+        <table class="table" style="width:100%;">
+          <thead style="background:var(--color-bg-card);">
+            <tr>
+              <th class="table__th">市场</th>
+              <th class="table__th table__th--right">持仓</th>
+              <th class="table__th table__th--right">总市值(CNY)</th>
+              <th class="table__th table__th--right">年化收益率</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || '<tr><td colspan="4" class="table__empty">暂无持仓</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#close-return-rates-modal').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+/**
+ * 显示各市场 YTD 收益明细弹窗
  */
 function showYtdModal(marketSummaries) {
   document.getElementById('ytd-modal')?.remove();
