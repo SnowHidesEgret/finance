@@ -56,9 +56,8 @@ export async function renderDashboardPage(container) {
         <div class="kpi-card kpi-card--cost animate-fade-in-up delay-4" id="kpi-ytd" style="cursor:pointer;" title="点击查看各市场 YTD 收益明细">
           <div class="kpi-card__icon">📅</div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">YTD 收益 (CNY)</div>
-            <div class="kpi-card__value" id="val-ytd-pnl">--</div>
-            <div class="kpi-card__sub" id="val-ytd-pct">--</div>
+            <div class="kpi-card__label">YTD 收益率</div>
+            <div class="kpi-card__value" id="val-ytd-pct">--</div>
           </div>
         </div>
         <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-return-rates" style="cursor:pointer;" title="点击查看各国市场年化收益率">
@@ -334,18 +333,11 @@ function updateKPICards(data) {
   }
   
   // YTD 卡片
-  const ytdPnl = data.portfolioYtdPnlCNY || 0;
   const ytdPct = data.portfolioYtdPercent || 0;
-  
-  const ytdPnlEl = document.getElementById('val-ytd-pnl');
-  if (ytdPnlEl) {
-    ytdPnlEl.textContent = formatCurrency(ytdPnl, 'CNY', true);
-    ytdPnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(ytdPnl)}`;
-  }
   const ytdPctEl = document.getElementById('val-ytd-pct');
   if (ytdPctEl) {
     ytdPctEl.textContent = formatPercent(ytdPct);
-    ytdPctEl.className = `kpi-card__sub kpi-card__sub--${getPnLClass(ytdPct)}`;
+    ytdPctEl.className = `kpi-card__value kpi-card__value--${getPnLClass(ytdPct)}`;
   }
   
   // 收益率卡片
