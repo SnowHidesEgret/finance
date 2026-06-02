@@ -216,6 +216,7 @@ async function fetchYtdPrice(yfSymbol) {
   let totalValueCNY = 0;
   let totalCostCNY  = 0;
   let totalDayPnL   = 0;
+  let portfolioYtdPnlCNY = 0;
 
   const marketBreakdown = {};
   const positionDetails = [];
@@ -339,13 +340,17 @@ async function fetchYtdPrice(yfSymbol) {
     // Day PnL
     const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
 
+    // Accumulate YTD PnL in CNY
+    const posYtdPnlCNY = round2(totalYtdPnLNative * rateToCNY);
+    portfolioYtdPnlCNY += posYtdPnlCNY;
+
     totalValueCNY += valueCNY;
     totalCostCNY  += costCNY;
     totalDayPnL   += dayChangeCNY;
 
     const mkt = p.market;
     if (!marketBreakdown[mkt]) {
-      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0 };
+      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0, ytdPnl: 0 };
     }
     marketBreakdown[mkt].value  += valueCNY;
     marketBreakdown[mkt].cost   += costCNY;
@@ -353,6 +358,7 @@ async function fetchYtdPrice(yfSymbol) {
     marketBreakdown[mkt].pnl    += pnlCNY;
     marketBreakdown[mkt].dayPnl += dayChangeCNY;
     marketBreakdown[mkt].weightedDays += avgHoldingDays * valueCNY;
+    marketBreakdown[mkt].ytdPnl += posYtdPnlCNY;
 
     positionDetails.push({
       ...p,
@@ -384,6 +390,7 @@ async function fetchYtdPrice(yfSymbol) {
 
   const totalPnlCNY     = round2(totalValueCNY - totalCostCNY);
   const totalPnlPercent = totalCostCNY !== 0 ? round2((totalPnlCNY / totalCostCNY) * 100) : 0;
+  portfolioYtdPnlCNY = round2(portfolioYtdPnlCNY);
 
   // Portfolio-level weighted average holding days & return rates
   let totalWeightedDays = 0;
@@ -393,6 +400,44 @@ async function fetchYtdPrice(yfSymbol) {
   const totalAvgHoldingDays   = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
   const totalAnnualizedReturn = round2((totalPnlPercent / totalAvgHoldingDays) * 365);
   const totalMonthlyReturn    = round2((totalPnlPercent / totalAvgHoldingDays) * 30);
+
+  // ── 5. Calculate portfolio YTD % ────────────────────────────────────
+  // Try to get year-start valuation from snapshots
+  const currentYear = new Date().getFullYear();
+  let yearStartValue = 0;
+  try {
+    const snap = await env.DB.prepare(
+      `SELECT total_value_cny FROM portfolio_snapshots
+       WHERE market = 'ALL' AND snapshot_date >= ?1 AND snapshot_date <= ?2
+       ORDER BY snapshot_date DESC LIMIT 1`
+    ).bind(`${currentYear - 1}-12-01`, `${currentYear - 1}-12-31`).first();
+    if (snap) yearStartValue = snap.total_value_cny;
+  } catch (e) {
+    console.warn('[summary] Failed to query year-start snapshot:', e.message);
+  }
+
+  // Fallback: reverse-calculate year-start value
+  if (!yearStartValue && totalValueCNY > 0) {
+    // Net inflow this year = sum of BUY trades this year - sum of SELL trades this year
+    let netInflowCNY = 0;
+    try {
+      const { results: yearTrades } = await env.DB.prepare(
+        `SELECT trade_type, price, quantity, rate_to_cny FROM trades WHERE trade_date >= ?1`
+      ).bind(`${currentYear}-01-01`).all();
+      for (const t of yearTrades || []) {
+        const amount = t.price * t.quantity * (t.rate_to_cny || 1);
+        if (t.trade_type === 'BUY') netInflowCNY += amount;
+        else if (t.trade_type === 'SELL') netInflowCNY -= amount;
+      }
+    } catch (e) {
+      console.warn('[summary] Failed to query year trades:', e.message);
+    }
+    yearStartValue = round2(totalValueCNY - portfolioYtdPnlCNY - netInflowCNY);
+  }
+
+  const portfolioYtdPercent = yearStartValue > 0
+    ? round2((portfolioYtdPnlCNY / yearStartValue) * 100)
+    : 0;
 
   // Build per-market stats
   const markets = {};
@@ -412,7 +457,45 @@ async function fetchYtdPrice(yfSymbol) {
       monthlyReturn:    round2((mktPnlPct / avgDays) * 30),
       positionCount:    data.count,
       dayPnL:           round2(data.dayPnl),
+      ytdPnlCNY:        round2(data.ytdPnl),
     };
+  }
+
+  // ── 6. Write daily snapshot (fire and forget) ───────────────────────
+  const today = new Date().toISOString().split('T')[0];
+  try {
+    const snapshotStmts = [];
+    // Per-market snapshots
+    for (const [mkt, data] of Object.entries(marketBreakdown)) {
+      snapshotStmts.push(
+        env.DB.prepare(
+          `INSERT INTO portfolio_snapshots (snapshot_date, market, total_value_cny, total_cost_cny, total_pnl_cny, ytd_pnl_cny, position_count)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           ON CONFLICT(snapshot_date, market) DO UPDATE SET
+             total_value_cny = excluded.total_value_cny,
+             total_cost_cny  = excluded.total_cost_cny,
+             total_pnl_cny   = excluded.total_pnl_cny,
+             ytd_pnl_cny     = excluded.ytd_pnl_cny,
+             position_count  = excluded.position_count`
+        ).bind(today, mkt, round2(data.value), round2(data.cost), round2(data.pnl), round2(data.ytdPnl), data.count)
+      );
+    }
+    // ALL summary snapshot
+    snapshotStmts.push(
+      env.DB.prepare(
+        `INSERT INTO portfolio_snapshots (snapshot_date, market, total_value_cny, total_cost_cny, total_pnl_cny, ytd_pnl_cny, position_count)
+         VALUES (?1, 'ALL', ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(snapshot_date, market) DO UPDATE SET
+           total_value_cny = excluded.total_value_cny,
+           total_cost_cny  = excluded.total_cost_cny,
+           total_pnl_cny   = excluded.total_pnl_cny,
+           ytd_pnl_cny     = excluded.ytd_pnl_cny,
+           position_count  = excluded.position_count`
+      ).bind(today, round2(totalValueCNY), round2(totalCostCNY), totalPnlCNY, portfolioYtdPnlCNY, positionDetails.length)
+    );
+    await env.DB.batch(snapshotStmts);
+  } catch (e) {
+    console.warn('[summary] Failed to write snapshots:', e.message);
   }
 
   return Response.json(
@@ -426,6 +509,8 @@ async function fetchYtdPrice(yfSymbol) {
         totalAvgHoldingDays,
         totalAnnualizedReturn,
         totalMonthlyReturn,
+        portfolioYtdPnlCNY,
+        portfolioYtdPercent,
         dayPnl:         round2(totalDayPnL),
         positionCount:  positionDetails.length,
         marketCounts:   Object.fromEntries(Object.entries(marketBreakdown).map(([m, d]) => [m, d.count])),

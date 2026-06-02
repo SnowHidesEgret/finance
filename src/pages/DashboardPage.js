@@ -61,11 +61,12 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__sub" id="val-position-count">-- 笔持仓</div>
           </div>
         </div>
-        <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-return-rates" style="cursor:pointer;" title="点击查看各国市场年化收益率">
-          <div class="kpi-card__icon">🎯</div>
+        <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-ytd" style="cursor:pointer;" title="点击查看各市场 YTD 收益明细">
+          <div class="kpi-card__icon">📅</div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">年化收益率</div>
-            <div class="kpi-card__value" id="val-annualized-return">--</div>
+            <div class="kpi-card__label">YTD 收益</div>
+            <div class="kpi-card__value" id="val-ytd-pnl">--</div>
+            <div class="kpi-card__sub" id="val-ytd-pct">--</div>
           </div>
         </div>
       </section>
@@ -103,6 +104,15 @@ export async function renderDashboardPage(container) {
               <h3 class="chart-container__title">盈亏排名</h3>
             </div>
             <div class="chart-container__body" id="chart-pnl-bar" style="height:320px"></div>
+          </div>
+        </div>
+        <div class="dashboard__charts-row" style="margin-top:20px;">
+          <div class="chart-container" style="width:100%;">
+            <div class="chart-container__header">
+              <h3 class="chart-container__title">资产走势</h3>
+              <span class="chart-container__hint">基于每日快照数据，持续使用自动积累</span>
+            </div>
+            <div class="chart-container__body" id="chart-asset-trend" style="height:300px"></div>
           </div>
         </div>
       </section>
@@ -199,11 +209,11 @@ export async function renderDashboardPage(container) {
     });
   }
   
-  // 绑定收益率点击事件
-  const returnCard = container.querySelector('#kpi-return-rates');
-  if (returnCard) {
-    returnCard.addEventListener('click', () => {
-      showReturnRatesModal(cachedMarketSummaries);
+  // 绑定 YTD 点击事件
+  const ytdCard = container.querySelector('#kpi-ytd');
+  if (ytdCard) {
+    ytdCard.addEventListener('click', () => {
+      showYtdModal(cachedMarketSummaries);
     });
   }
   
@@ -256,6 +266,16 @@ async function loadDashboardData(container) {
         updateMarketOverview(cachedMarketSummaries);
         updatePositionTable(quoteData.positions || positionList, rates);
         updateCharts(quoteData, positionList, rates);
+        
+        // Load snapshots for asset trend chart (non-blocking)
+        get('/api/snapshots', { days: 90, market: 'ALL' }).then(snapshots => {
+          if (snapshots && snapshots.length > 0) {
+            updateAssetTrendChart(snapshots);
+          } else {
+            updateAssetTrendChart([]);
+          }
+        }).catch(() => updateAssetTrendChart([]));
+        
         return;
       }
     } catch (e) {
@@ -338,13 +358,19 @@ function updateKPICards(data) {
   const countEl = document.getElementById('val-position-count');
   if (countEl) countEl.textContent = `${count} 笔持仓`;
   
-  // 收益率卡片
-  const annualizedReturn = data.totalAnnualizedReturn || data.totalAnnualizedReturn || 0;
+  // YTD 卡片
+  const ytdPnl = data.portfolioYtdPnlCNY || 0;
+  const ytdPct = data.portfolioYtdPercent || 0;
   
-  const annualEl = document.getElementById('val-annualized-return');
-  if (annualEl) {
-    annualEl.textContent = formatPercent(annualizedReturn);
-    annualEl.className = `kpi-card__value kpi-card__value--${getPnLClass(annualizedReturn)}`;
+  const ytdPnlEl = document.getElementById('val-ytd-pnl');
+  if (ytdPnlEl) {
+    ytdPnlEl.textContent = formatCurrency(ytdPnl, 'CNY', true);
+    ytdPnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(ytdPnl)}`;
+  }
+  const ytdPctEl = document.getElementById('val-ytd-pct');
+  if (ytdPctEl) {
+    ytdPctEl.textContent = formatPercent(ytdPct);
+    ytdPctEl.className = `kpi-card__sub kpi-card__sub--${getPnLClass(ytdPct)}`;
   }
 }
 
@@ -653,6 +679,21 @@ async function updateCharts(summary, positions, rates) {
     
   } catch (error) {
     console.error('[Dashboard] Chart rendering failed:', error);
+  }
+}
+
+/**
+ * 更新资产走势图
+ */
+async function updateAssetTrendChart(snapshots) {
+  const container = document.getElementById('chart-asset-trend');
+  if (!container) return;
+  
+  try {
+    const { renderAssetTrend } = await import('../charts/assetTrend.js');
+    renderAssetTrend(container, snapshots);
+  } catch (err) {
+    console.error('[Dashboard] Asset trend chart failed:', err);
   }
 }
 
@@ -1033,23 +1074,24 @@ async function showValueModal(positions) {
 /**
  * 显示各国市场年化收益率弹窗
  */
-function showReturnRatesModal(marketSummaries) {
-  document.getElementById('return-rates-modal')?.remove();
+function showYtdModal(marketSummaries) {
+  document.getElementById('ytd-modal')?.remove();
 
   const overlay = document.createElement('div');
-  overlay.id = 'return-rates-modal';
+  overlay.id = 'ytd-modal';
   overlay.style.cssText = `
     position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
     display: flex; align-items: center; justify-content: center; z-index: 9999;
     animation: fadeIn 0.15s ease;
   `;
 
-  // Filter out empty markets and calculate rows
+  let totalYtd = 0;
   const rowsHtml = MARKET_IDS.map(id => {
     const data = marketSummaries[id];
     if (!data || data.positionCount === 0) return '';
     const market = MARKETS[id];
-    const annualizedReturn = data.annualizedReturn || 0;
+    const ytdPnl = data.ytdPnlCNY || 0;
+    totalYtd += ytdPnl;
     
     return `
       <tr class="table__row">
@@ -1064,8 +1106,11 @@ function showReturnRatesModal(marketSummaries) {
         <td class="table__td table__td--right table__td--mono">
           ${formatCurrency(data.totalValue || 0)}
         </td>
-        <td class="table__td table__td--right table__td--${getPnLClass(annualizedReturn)}">
-          ${formatPercent(annualizedReturn)}
+        <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(ytdPnl)}">
+          ${formatCurrency(ytdPnl, 'CNY', true)}
+        </td>
+        <td class="table__td table__td--right table__td--${getPnLClass(data.pnlPercent || 0)}">
+          ${formatPercent(data.pnlPercent || 0)}
         </td>
       </tr>
     `;
@@ -1074,14 +1119,17 @@ function showReturnRatesModal(marketSummaries) {
   overlay.innerHTML = `
     <div style="
       background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
-      border-radius:20px; padding:24px; width:max-content; min-width:400px; max-width:95vw; 
+      border-radius:20px; padding:24px; width:max-content; min-width:500px; max-width:95vw; 
       box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
-          🎯 各国市场年化收益率
+          📅 各市场 YTD 收益明细
+          <span class="market-summary-card__stat-value--${getPnLClass(totalYtd)}" style="font-size:1rem;">
+            合计 ${formatCurrency(totalYtd, 'CNY', true)}
+          </span>
         </h3>
-        <button id="close-return-rates-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+        <button id="close-ytd-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
       </div>
       
       <div class="table-wrapper" style="border-radius:12px;">
@@ -1091,11 +1139,12 @@ function showReturnRatesModal(marketSummaries) {
               <th class="table__th">市场</th>
               <th class="table__th table__th--right">持仓</th>
               <th class="table__th table__th--right">总市值(CNY)</th>
-              <th class="table__th table__th--right">年化收益率</th>
+              <th class="table__th table__th--right">YTD 收益(CNY)</th>
+              <th class="table__th table__th--right">总收益率</th>
             </tr>
           </thead>
           <tbody>
-            ${rowsHtml || '<tr><td colspan="4" class="table__empty">暂无持仓</td></tr>'}
+            ${rowsHtml || '<tr><td colspan="5" class="table__empty">暂无持仓</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -1104,7 +1153,7 @@ function showReturnRatesModal(marketSummaries) {
 
   document.body.appendChild(overlay);
 
-  overlay.querySelector('#close-return-rates-modal').addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#close-ytd-modal').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
