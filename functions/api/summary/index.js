@@ -402,41 +402,15 @@ async function fetchYtdPrice(yfSymbol) {
   const totalMonthlyReturn    = round2((totalPnlPercent / totalAvgHoldingDays) * 30);
 
   // ── 5. Calculate portfolio YTD % ────────────────────────────────────
-  // Try to get year-start valuation from snapshots
-  const currentYear = new Date().getFullYear();
-  let yearStartValue = 0;
-  try {
-    const snap = await env.DB.prepare(
-      `SELECT total_value_cny FROM portfolio_snapshots
-       WHERE market = 'ALL' AND snapshot_date >= ?1 AND snapshot_date <= ?2
-       ORDER BY snapshot_date DESC LIMIT 1`
-    ).bind(`${currentYear - 1}-12-01`, `${currentYear - 1}-12-31`).first();
-    if (snap) yearStartValue = snap.total_value_cny;
-  } catch (e) {
-    console.warn('[summary] Failed to query year-start snapshot:', e.message);
-  }
+  // 为了解决年中大额加仓导致的 YTD 收益率失真（分子包含新购持仓利润，但分母由于严格倒推而缺少对应本金），
+  // 这里统一使用“YTD 成本基准 (YTD Capital Base)”作为分母。
+  // YTD 成本基准 = 当前总市值 - YTD 绝对收益。
+  // 在数学上，它完全等价于：年初实际资产 + 年内净转入本金。
+  // 这不仅消除了年初快照缺失时的复杂倒推误差，也和下方的分市场 YTD 计算逻辑保持了完美一致。
+  const ytdCapitalBase = round2(totalValueCNY - portfolioYtdPnlCNY);
 
-  // Fallback: reverse-calculate year-start value
-  if (!yearStartValue && totalValueCNY > 0) {
-    // Net inflow this year = sum of BUY trades this year - sum of SELL trades this year
-    let netInflowCNY = 0;
-    try {
-      const { results: yearTrades } = await env.DB.prepare(
-        `SELECT trade_type, price, quantity, rate_to_cny FROM trades WHERE trade_date >= ?1`
-      ).bind(`${currentYear}-01-01`).all();
-      for (const t of yearTrades || []) {
-        const amount = t.price * t.quantity * (t.rate_to_cny || 1);
-        if (t.trade_type === 'BUY') netInflowCNY += amount;
-        else if (t.trade_type === 'SELL') netInflowCNY -= amount;
-      }
-    } catch (e) {
-      console.warn('[summary] Failed to query year trades:', e.message);
-    }
-    yearStartValue = round2(totalValueCNY - portfolioYtdPnlCNY - netInflowCNY);
-  }
-
-  const portfolioYtdPercent = yearStartValue > 0
-    ? round2((portfolioYtdPnlCNY / yearStartValue) * 100)
+  const portfolioYtdPercent = ytdCapitalBase > 0
+    ? round2((portfolioYtdPnlCNY / ytdCapitalBase) * 100)
     : 0;
 
   // Build per-market stats
