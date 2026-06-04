@@ -11,6 +11,11 @@ import { get, put, del } from '../services/api.js';
 /** 货币 → 符号 */
 const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
 
+let currentSortField = '';
+let currentSortOrder = 'desc';
+let cachedPositions = [];
+let cachedLiveMap = new Map();
+
 /** 格式化本币金额 */
 function fmtNative(amount, currency, showSign = false) {
   const sym = CURRENCY_SYMBOL[currency] || '';
@@ -189,7 +194,7 @@ function showActiveLotsModal(pos, currency, activeLots) {
       <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(lot.pnlNative)}">${fmtNative(lot.pnlNative, currency, true)}</td>
       <td class="table__td table__td--right table__td--${getPnLClass(lot.pnlPercent)}">${formatPercent(lot.pnlPercent)}</td>
       <td class="table__td table__td--right">${lot.holdingDays}天</td>
-      <td class="table__td table__td--right table__td--${getPnLClass(lot.annualizedReturn)}">${formatPercent(lot.annualizedReturn)}</td>
+      <td class="table__td table__td--right table__td--${getPnLClass(lot.ytdPercent || 0)}">${formatPercent(lot.ytdPercent || 0)}</td>
     </tr>
   `).join('') : `<tr><td colspan="8" class="table__empty">暂无未平仓批次数据</td></tr>`;
 
@@ -215,7 +220,7 @@ function showActiveLotsModal(pos, currency, activeLots) {
               <th class="table__th table__th--right">浮动盈亏</th>
               <th class="table__th table__th--right">盈亏比例</th>
               <th class="table__th table__th--right">持仓天数</th>
-              <th class="table__th table__th--right">年化收益率</th>
+              <th class="table__th table__th--right" title="YTD收益率">YTD</th>
             </tr>
           </thead>
           <tbody>
@@ -282,15 +287,14 @@ export async function renderPositionsPage(container) {
                 <th class="table__th table__th--right">当前市值</th>
                 <th class="table__th table__th--right">浮动盈亏</th>
                 <th class="table__th table__th--right">收益率</th>
-                <th class="table__th table__th--right" title="Year-To-Date 年内收益率">YTD</th>
                 <th class="table__th table__th--right">持仓天数</th>
-                <th class="table__th table__th--right">年化收益</th>
+                <th class="table__th table__th--right positions-sortable" data-sort="ytd" style="cursor:pointer; user-select:none;" title="YTD收益率">YTD <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right">状态</th>
                 <th class="table__th table__th--right">操作</th>
               </tr>
             </thead>
             <tbody id="full-positions-tbody">
-              <tr><td colspan="14" class="table__empty">加载中...</td></tr>
+              <tr><td colspan="13" class="table__empty">加载中...</td></tr>
             </tbody>
           </table>
         </div>
@@ -298,9 +302,34 @@ export async function renderPositionsPage(container) {
     </div>
   `;
 
+  currentSortField = '';
+  currentSortOrder = 'desc';
+
   await loadPositions();
 
   container.querySelector('#btn-search')?.addEventListener('click', loadPositions);
+
+  // 绑定排序事件
+  container.querySelectorAll('.positions-sortable').forEach(th => {
+    th.addEventListener('click', (e) => {
+      const field = e.currentTarget.dataset.sort;
+      if (currentSortField === field) {
+        currentSortOrder = currentSortOrder === 'desc' ? 'asc' : 'desc';
+      } else {
+        currentSortField = field;
+        currentSortOrder = 'desc';
+      }
+      
+      // 更新图标
+      container.querySelectorAll('.positions-sortable .sort-icon').forEach(icon => icon.textContent = '');
+      const icon = e.currentTarget.querySelector('.sort-icon');
+      if (icon) {
+        icon.textContent = currentSortOrder === 'desc' ? '↓' : '↑';
+      }
+      
+      renderPositionsTable();
+    });
+  });
 
   // 全局刷新监听
   const refreshHandler = () => loadPositions();
@@ -323,202 +352,225 @@ async function loadPositions() {
   const market = document.getElementById('filter-market')?.value || '';
   const status = document.getElementById('filter-status')?.value || 'OPEN';
 
-  tbody.innerHTML = `<tr><td colspan="14" class="table__empty">加载中...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="13" class="table__empty">加载中...</td></tr>`;
 
   try {
     const params = {};
     if (market) params.market = market;
     if (status) params.status = status;
 
-    // 并行获取：持仓列表 + 含实时价格的 summary
+    // 并行获取：持仓列表 + 含实时价格 of summary
     const [rawPositions, summary] = await Promise.all([
       get('/api/positions', params),
       get('/api/summary').catch(() => null),
     ]);
 
-    const positions = Array.isArray(rawPositions) ? rawPositions : [];
-
-    if (positions.length === 0) {
-      tbody.innerHTML = `
-        <tr><td colspan="14" class="table__empty">
-          <div class="empty-state">
-            <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
-            <p class="empty-state__text">暂无数据</p>
-            <a href="#/trade" class="btn btn--primary btn--sm">录入第一笔交易</a>
-          </div>
-        </td></tr>`;
-      return;
-    }
-
-    // 实时价格 map: symbol → liveData（来自 summary API）
-    const liveMap = new Map();
+    cachedPositions = Array.isArray(rawPositions) ? rawPositions : [];
+    cachedLiveMap.clear();
     if (summary?.positions) {
       for (const p of summary.positions) {
-        liveMap.set(p.symbol?.toUpperCase(), p);
+        cachedLiveMap.set(p.symbol?.toUpperCase(), p);
       }
     }
 
     // 行情时间戳
     const timeEl = document.getElementById('price-update-time');
     if (timeEl) {
-      const anyLive = [...liveMap.values()].some(p => p.hasLivePrice);
+      const anyLive = [...cachedLiveMap.values()].some(p => p.hasLivePrice);
       timeEl.textContent = anyLive
         ? `⏱ 行情: ${new Date().toLocaleTimeString('zh-CN')}`
         : '⚠ 行情获取失败，显示成本价';
       timeEl.style.color = anyLive ? 'var(--color-text-muted)' : '#f59e0b';
     }
 
-    tbody.innerHTML = positions.map(pos => {
-      const isClosed = pos.status === 'CLOSED';
-      const m = MARKETS[pos.market] || {};
-
-      // ── 本币（优先用 DB 存储的 currency，为空则按市场推断）
-      const currency = getCurrency(pos);
-      const sym      = CURRENCY_SYMBOL[currency] || '';
-      const live     = liveMap.get(pos.symbol?.toUpperCase());
-
-      // 现价（本币）
-      const currentPrice = isClosed
-        ? (pos.close_price ?? pos.open_price)
-        : (live?.currentPrice ?? pos.open_price);
-      const hasLivePrice = !isClosed && !!live?.hasLivePrice;
-
-      // 成本 / 市值 / 盈亏（全部本币，不做汇率换算）
-      const costOrig  = pos.open_price * pos.quantity + (pos.commission ?? 0);
-      const valueOrig = currentPrice * pos.quantity;
-      const pnlOrig   = valueOrig - costOrig;
-      const pnlPct    = costOrig > 0 ? (pnlOrig / costOrig) * 100 : 0;
-
-      // 持仓天数与年化收益率
-      let holdingDays, annualizedRtn;
-      if (isClosed) {
-        holdingDays = calcHoldingDays(pos.open_date, pos.close_date);
-        annualizedRtn = holdingDays > 0 ? (pnlPct / holdingDays) * 365 : 0;
-      } else {
-        holdingDays = live?.holdingDays || calcHoldingDays(pos.open_date);
-        annualizedRtn = live?.annualizedReturn ?? (holdingDays > 0 ? (pnlPct / holdingDays) * 365 : 0);
-      }
-
-      const priceDisplay = hasLivePrice
-        ? fmtNative(currentPrice, currency)
-        : `<span style="color:var(--color-text-muted)" title="未获取到实时行情，显示开仓价">${fmtNative(currentPrice, currency)} <small>*</small></span>`;
-
-      let ytdDisplay = `<span style="color:var(--color-text-muted)">-</span>`;
-      if (!isClosed && live?.ytdPercent !== undefined) {
-        ytdDisplay = `<span class="table__td--${getPnLClass(live.ytdPercent)}">${formatPercent(live.ytdPercent)}</span>`;
-      }
-
-      return `
-        <tr class="table__row table__row--hoverable" data-id="${pos.id}">
-          <td class="table__td">
-            <div class="pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); display:inline-block; border-bottom:1px dashed var(--color-primary); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细 (${pos.name})">${pos.name}</div>
-            <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
-          </td>
-          <td class="table__td" title="${m.label || pos.market}">
-            ${m.flag || ''}
-          </td>
-          <td class="table__td table__td--right">${formatQuantity(pos.quantity)}</td>
-          <td class="table__td table__td--right table__td--mono">${fmtNative(pos.open_price, currency)}</td>
-          <td class="table__td table__td--right table__td--mono">${priceDisplay}</td>
-          <td class="table__td table__td--right table__td--mono">${fmtNative(costOrig, currency)}</td>
-          <td class="table__td table__td--right table__td--mono">${fmtNative(valueOrig, currency)}</td>
-          <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(pnlOrig)}">
-            ${fmtNative(pnlOrig, currency, true)}
-          </td>
-          <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
-            ${formatPercent(pnlPct)}
-          </td>
-          <td class="table__td table__td--right">
-            ${ytdDisplay}
-          </td>
-          <td class="table__td table__td--right table__td--mono" title="持仓天数">
-            ${holdingDays}天
-          </td>
-          <td class="table__td table__td--right table__td--${getPnLClass(annualizedRtn)}">
-            ${formatPercent(annualizedRtn)}
-          </td>
-          <td class="table__td table__td--right">
-            <span class="tag" style="background:${isClosed ? '#374151' : '#065f46'}">
-              ${isClosed ? '已平仓' : '持仓中'}
-            </span>
-          </td>
-          <td class="table__td table__td--right">
-            <div style="display:flex;gap:8px;justify-content:flex-end;">
-              ${!isClosed ? `
-              <button class="btn btn--sm btn--ghost btn-close-pos"
-                data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}" data-quantity="${pos.quantity}" data-price="${currentPrice}" data-currency="${currency}"
-                title="平仓">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                  <polyline points="16 17 21 12 16 7"></polyline>
-                  <line x1="21" y1="12" x2="9" y2="12"></line>
-                </svg>
-              </button>` : ''}
-              <button class="btn btn--sm btn--ghost btn-delete-pos"
-                data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}"
-                style="color:#ef4444;border-color:rgba(239,68,68,0.3);"
-                title="删除持仓">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6l-1 14H6L5 6"></path>
-                  <path d="M10 11v6M14 11v6"></path>
-                  <path d="M9 6V4h6v2"></path>
-                </svg>
-              </button>
-            </div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-
-    // 绑定查看逐笔明细事件
-    tbody.querySelectorAll('.pos-name-click').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const { id, symbol, name, currency } = btn.dataset;
-        const live = liveMap.get(symbol.toUpperCase());
-        if (live && live.activeLots && live.activeLots.length > 0) {
-          showActiveLotsModal({ id, name, symbol }, currency, live.activeLots);
-        } else {
-          alert('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
-        }
-      });
-    });
-
-    // 绑定删除按钮事件
-    tbody.querySelectorAll('.btn-delete-pos').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const { id, name, symbol } = btn.dataset;
-        showDeleteModal({ id, name, symbol }, async () => {
-          try {
-            await del(`/api/positions/${id}`);
-            await loadPositions(); // 刷新列表
-          } catch (err) {
-            alert(`删除失败: ${err.message}`);
-          }
-        });
-      });
-    });
-
-    // 绑定平仓按钮事件
-    tbody.querySelectorAll('.btn-close-pos').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const { id, name, symbol, quantity, price, currency } = btn.dataset;
-        showCloseModal({ id, name, symbol, quantity }, price, currency, async (closeData) => {
-          try {
-            await put(`/api/positions/${id}`, {
-              status: 'CLOSED',
-              ...closeData
-            });
-            await loadPositions(); // 刷新列表
-          } catch (err) {
-            alert(`平仓失败: ${err.message}`);
-          }
-        });
-      });
-    });
+    renderPositionsTable();
 
   } catch (error) {
     console.error('Failed to load positions', error);
-    tbody.innerHTML = `<tr><td colspan="11" class="table__empty">加载失败: ${error.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="table__empty">加载失败: ${error.message}</td></tr>`;
   }
+}
+
+function renderPositionsTable() {
+  const tbody = document.getElementById('full-positions-tbody');
+  if (!tbody) return;
+
+  if (cachedPositions.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="13" class="table__empty">
+        <div class="empty-state">
+          <div class="empty-state__icon"><i data-lucide="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
+          <p class="empty-state__text">暂无数据</p>
+          <a href="#/trade" class="btn btn--primary btn--sm">录入第一笔交易</a>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  // Sorting
+  let sortedPositions = [...cachedPositions];
+  if (currentSortField === 'ytd') {
+    sortedPositions.sort((a, b) => {
+      const isClosedA = a.status === 'CLOSED';
+      const isClosedB = b.status === 'CLOSED';
+      
+      const liveA = cachedLiveMap.get(a.symbol?.toUpperCase());
+      const liveB = cachedLiveMap.get(b.symbol?.toUpperCase());
+      
+      const ytdA = (!isClosedA && liveA?.ytdPercent !== undefined) ? liveA.ytdPercent : -99999;
+      const ytdB = (!isClosedB && liveB?.ytdPercent !== undefined) ? liveB.ytdPercent : -99999;
+      
+      return currentSortOrder === 'desc' ? ytdB - ytdA : ytdA - ytdB;
+    });
+  }
+
+  tbody.innerHTML = sortedPositions.map(pos => {
+    const isClosed = pos.status === 'CLOSED';
+    const m = MARKETS[pos.market] || {};
+
+    // ── 本币（优先用 DB 存储的 currency，为空则按市场推断）
+    const currency = getCurrency(pos);
+    const live     = cachedLiveMap.get(pos.symbol?.toUpperCase());
+
+    // 现价（本币）
+    const currentPrice = isClosed
+      ? (pos.close_price ?? pos.open_price)
+      : (live?.currentPrice ?? pos.open_price);
+    const hasLivePrice = !isClosed && !!live?.hasLivePrice;
+
+    // 成本 / 市值 / 盈亏（全部本币，不做汇率换算）
+    const costOrig  = pos.open_price * pos.quantity + (pos.commission ?? 0);
+    const valueOrig = currentPrice * pos.quantity;
+    const pnlOrig   = valueOrig - costOrig;
+    const pnlPct    = costOrig > 0 ? (pnlOrig / costOrig) * 100 : 0;
+
+    // 持仓天数与年化收益率
+    let holdingDays;
+    if (isClosed) {
+      holdingDays = calcHoldingDays(pos.open_date, pos.close_date);
+    } else {
+      holdingDays = live?.holdingDays || calcHoldingDays(pos.open_date);
+    }
+
+    const priceDisplay = hasLivePrice
+      ? fmtNative(currentPrice, currency)
+      : `<span style="color:var(--color-text-muted)" title="未获取到实时行情，显示开仓价">${fmtNative(currentPrice, currency)} <small>*</small></span>`;
+
+    let ytdPercent = 0;
+    if (!isClosed && live?.ytdPercent !== undefined) {
+      ytdPercent = live.ytdPercent;
+    }
+
+    return `
+      <tr class="table__row table__row--hoverable" data-id="${pos.id}">
+        <td class="table__td">
+          <div class="pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); display:inline-block; border-bottom:1px dashed var(--color-primary); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细 (${pos.name})">${pos.name}</div>
+          <div style="font-size:0.75rem;color:var(--color-text-secondary);font-family:monospace">${pos.symbol}</div>
+        </td>
+        <td class="table__td" title="${m.label || pos.market}">
+          ${m.flag || ''}
+        </td>
+        <td class="table__td table__td--right">${formatQuantity(pos.quantity)}</td>
+        <td class="table__td table__td--right table__td--mono">${fmtNative(pos.open_price, currency)}</td>
+        <td class="table__td table__td--right table__td--mono">${priceDisplay}</td>
+        <td class="table__td table__td--right table__td--mono">${fmtNative(costOrig, currency)}</td>
+        <td class="table__td table__td--right table__td--mono">${fmtNative(valueOrig, currency)}</td>
+        <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(pnlOrig)}">
+          ${fmtNative(pnlOrig, currency, true)}
+        </td>
+        <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
+          ${formatPercent(pnlPct)}
+        </td>
+        <td class="table__td table__td--right table__td--mono" title="持仓天数">
+          ${holdingDays}天
+        </td>
+        <td class="table__td table__td--right table__td--${isClosed ? 'normal' : getPnLClass(ytdPercent)}">
+          ${isClosed ? '-' : formatPercent(ytdPercent)}
+        </td>
+        <td class="table__td table__td--right">
+          <span class="tag" style="background:${isClosed ? '#374151' : '#065f46'}">
+            ${isClosed ? '已平仓' : '持仓中'}
+          </span>
+        </td>
+        <td class="table__td table__td--right">
+          <div style="display:flex;gap:8px;justify-content:flex-end;">
+            ${!isClosed ? `
+            <button class="btn btn--sm btn--ghost btn-close-pos"
+              data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}" data-quantity="${pos.quantity}" data-price="${currentPrice}" data-currency="${currency}"
+              title="平仓">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+            </button>` : ''}
+            <button class="btn btn--sm btn--ghost btn-delete-pos"
+              data-id="${pos.id}" data-name="${pos.name}" data-symbol="${pos.symbol}"
+              style="color:#ef4444;border-color:rgba(239,68,68,0.3);"
+              title="删除持仓">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6l-1 14H6L5 6"></path>
+                <path d="M10 11v6M14 11v6"></path>
+                <path d="M9 6V4h6v2"></path>
+              </svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  bindTableEvents();
+}
+
+function bindTableEvents() {
+  const tbody = document.getElementById('full-positions-tbody');
+  if (!tbody) return;
+
+  // 绑定查看逐笔明细事件
+  tbody.querySelectorAll('.pos-name-click').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { id, symbol, name, currency } = btn.dataset;
+      const live = cachedLiveMap.get(symbol.toUpperCase());
+      if (live && live.activeLots && live.activeLots.length > 0) {
+        showActiveLotsModal({ id, name, symbol }, currency, live.activeLots);
+      } else {
+        alert('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
+      }
+    });
+  });
+
+  // 绑定删除按钮事件
+  tbody.querySelectorAll('.btn-delete-pos').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { id, name, symbol } = btn.dataset;
+      showDeleteModal({ id, name, symbol }, async () => {
+        try {
+          await del(`/api/positions/${id}`);
+          await loadPositions(); // 刷新整个数据（包括重新请求）
+        } catch (err) {
+          alert(`删除失败: ${err.message}`);
+        }
+      });
+    });
+  });
+
+  // 绑定平仓按钮事件
+  tbody.querySelectorAll('.btn-close-pos').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { id, name, symbol, quantity, price, currency } = btn.dataset;
+      showCloseModal({ id, name, symbol, quantity }, price, currency, async (closeData) => {
+        try {
+          await put(`/api/positions/${id}`, {
+            status: 'CLOSED',
+            ...closeData
+          });
+          await loadPositions(); // 刷新整个数据（包括重新请求）
+        } catch (err) {
+          alert(`平仓失败: ${err.message}`);
+        }
+      });
+    });
+  });
 }

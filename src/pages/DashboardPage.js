@@ -125,7 +125,7 @@ export async function renderDashboardPage(container) {
                 <th class="table__th table__th--right">市值(¥)</th>
                 <th class="table__th table__th--right dashboard-sortable" data-sort="pnl" style="cursor:pointer; user-select:none;" title="点击按盈亏排序">盈亏(¥) <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right">盈亏%</th>
-                <th class="table__th table__th--right">年化</th>
+                <th class="table__th table__th--right dashboard-sortable" data-sort="ytd" style="cursor:pointer; user-select:none;" title="YTD收益率">YTD <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right dashboard-sortable" data-sort="weight" style="cursor:pointer; user-select:none;" title="点击按占比排序">占比 <span class="sort-icon">↓</span></th>
               </tr>
             </thead>
@@ -528,6 +528,9 @@ function updatePositionTable(positions, rates) {
     } else if (currentSortField === 'pnl') {
       valA = a.pnlCNY || a.pnl_cny || 0;
       valB = b.pnlCNY || b.pnl_cny || 0;
+    } else if (currentSortField === 'ytd') {
+      valA = a.ytdPercent || 0;
+      valB = b.ytdPercent || 0;
     }
     
     return currentSortOrder === 'desc' ? valB - valA : valA - valB;
@@ -566,8 +569,8 @@ function updatePositionTable(positions, rates) {
         <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
           ${formatPercent(pnlPct)}
         </td>
-        <td class="table__td table__td--right table__td--${getPnLClass(pos.annualizedReturn || 0)}">
-          ${formatPercent(pos.annualizedReturn || 0)}
+        <td class="table__td table__td--right table__td--${getPnLClass(pos.ytdPercent || 0)}">
+          ${formatPercent(pos.ytdPercent || 0)}
         </td>
         <td class="table__td table__td--right">${weight.toFixed(1)}%</td>
       </tr>
@@ -877,8 +880,8 @@ function showMarketPositionsModal(marketId, positions) {
             <td class="table__td table__td--right table__td--${getPnLClass(totalPnlPct)}">
               ${formatPercent(totalPnlPct)}
             </td>
-            <td class="table__td table__td--right table__td--${getPnLClass(pos.annualizedReturn || 0)}">
-              ${formatPercent(pos.annualizedReturn || 0)}
+            <td class="table__td table__td--right table__td--${getPnLClass(pos.ytdPercent || 0)}">
+              ${formatPercent(pos.ytdPercent || 0)}
             </td>
           </tr>
         `;
@@ -908,7 +911,7 @@ function showMarketPositionsModal(marketId, positions) {
               <th class="table__th table__th--right">今日盈亏</th>
               <th class="table__th table__th--right">今日盈亏%</th>
               <th class="table__th table__th--right">总盈亏%</th>
-              <th class="table__th table__th--right">年化</th>
+              <th class="table__th table__th--right" title="YTD收益率">YTD</th>
             </tr>
           </thead>
           <tbody>
