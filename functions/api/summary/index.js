@@ -88,9 +88,13 @@ export async function onRequestGet(context) {
     return r ? amount / r : amount;
   }
 
-  // ── 2. Load all open positions from DB ──────────────────────────────
+  // ── 2. Load all open & this year's closed positions from DB ─────────
+  const currentYearStr = new Date().getFullYear().toString();
   const { results: positions } = await env.DB.prepare(
-    `SELECT * FROM positions WHERE status = 'OPEN' ORDER BY market, open_date DESC`,
+    `SELECT * FROM positions 
+     WHERE status = 'OPEN' 
+        OR (status = 'CLOSED' AND close_date >= '${currentYearStr}-01-01')
+     ORDER BY market, open_date DESC`,
   ).all();
 
   if (!positions || positions.length === 0) {
@@ -243,35 +247,52 @@ async function fetchYtdPrice(yfSymbol) {
     const pnlCNY         = round2(valueCNY - costCNY);
     const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
     
-    // Lot-level calculation for accurate return rates
+    // Lot-level calculation & Realized YTD from partial/full sales
     const pTrades = tradesByPosition[p.id] || [];
-    let priorSold = 0;
     const buyTrades = [];
+    const sellTrades = [];
     for (const t of pTrades) {
-      if (t.trade_type === 'SELL') priorSold += t.quantity;
+      if (t.trade_type === 'SELL') sellTrades.push(t);
       else if (t.trade_type === 'BUY') buyTrades.push(t);
     }
     
-    let priorSoldTracker = priorSold;
-    const activeLots = [];
-    for (const b of buyTrades) {
-      let bQty = b.quantity;
-      if (priorSoldTracker > 0) {
-        if (priorSoldTracker >= bQty) {
-          priorSoldTracker -= bQty;
-          continue;
-        } else {
-          bQty -= priorSoldTracker;
-          priorSoldTracker = 0;
+    const buyLots = buyTrades.map(t => ({ ...t, remaining: t.quantity }));
+    let realizedYtdPnlNative = 0;
+    let realizedYtdBaseNative = 0;
+    
+    const nowMs = Date.now();
+    const currentYear = new Date().getFullYear();
+    
+    for (const sell of sellTrades) {
+      let sellQty = sell.quantity;
+      const isSellThisYear = (new Date(sell.trade_date).getFullYear() === currentYear);
+
+      for (const buy of buyLots) {
+        if (sellQty <= 0) break;
+        if (buy.remaining <= 0) continue;
+
+        const matchedQty = Math.min(sellQty, buy.remaining);
+        sellQty -= matchedQty;
+        buy.remaining -= matchedQty;
+
+        if (isSellThisYear) {
+           const buyYear = new Date(buy.trade_date).getFullYear();
+           let lotYtdBasePrice = buy.price;
+           if (buyYear < currentYear && ytdPrice && ytdPrice > 0) {
+             lotYtdBasePrice = ytdPrice;
+           }
+           const lotYtdBaseNative = matchedQty * lotYtdBasePrice;
+           const lotProceedsNative = matchedQty * sell.price;
+           realizedYtdPnlNative += (lotProceedsNative - lotYtdBaseNative);
+           realizedYtdBaseNative += lotYtdBaseNative;
         }
       }
-      activeLots.push({ ...b, activeQuantity: bQty });
     }
+    
+    const activeLots = buyLots.filter(b => b.remaining > 0).map(b => ({ ...b, activeQuantity: b.remaining }));
     
     let weightedHoldingDays = 0;
     let lotTotalCostCNY = 0;
-    const nowMs = Date.now();
-    const currentYear = new Date().getFullYear();
     const processedLots = [];
     
     let totalYtdPnLNative = 0;
@@ -315,7 +336,9 @@ async function fetchYtdPrice(yfSymbol) {
       lotTotalCostCNY += lotCostCNYValue;
     }
     
-    const ytdPercent = totalYtdBaseNative > 0 ? round2((totalYtdPnLNative / totalYtdBaseNative) * 100) : 0;
+    const positionYtdBaseNative = totalYtdBaseNative + realizedYtdBaseNative;
+    const positionYtdPnLNative = totalYtdPnLNative + realizedYtdPnlNative;
+    const ytdPercent = positionYtdBaseNative > 0 ? round2((positionYtdPnLNative / positionYtdBaseNative) * 100) : 0;
     
     // Find the earliest trade date among ALL buy trades for this continuous position
     let earliestDate = p.open_date;
@@ -340,18 +363,24 @@ async function fetchYtdPrice(yfSymbol) {
     // Day PnL
     const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
 
-    // Accumulate YTD PnL in CNY
-    const posYtdPnlCNY = round2(totalYtdPnLNative * rateToCNY);
+    // Accumulate YTD PnL in CNY (includes both active and realized this year)
+    const posYtdPnlCNY = round2(positionYtdPnLNative * rateToCNY);
     portfolioYtdPnlCNY += posYtdPnlCNY;
-
-    totalValueCNY += valueCNY;
-    totalCostCNY  += costCNY;
-    totalDayPnL   += dayChangeCNY;
 
     const mkt = p.market;
     if (!marketBreakdown[mkt]) {
       marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0, ytdPnl: 0 };
     }
+
+    // If position is closed, only add its YTD to portfolio & market breakdown, skip active metrics
+    if (p.status === 'CLOSED') {
+      marketBreakdown[mkt].ytdPnl += posYtdPnlCNY;
+      continue;
+    }
+
+    totalValueCNY += valueCNY;
+    totalCostCNY  += costCNY;
+    totalDayPnL   += dayChangeCNY;
     marketBreakdown[mkt].value  += valueCNY;
     marketBreakdown[mkt].cost   += costCNY;
     marketBreakdown[mkt].count  += 1;
