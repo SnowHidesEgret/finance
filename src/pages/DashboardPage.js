@@ -10,6 +10,7 @@ import { getExchangeRates } from '../services/exchangeRate.js';
 import { getQuotes } from '../services/stockApi.js';
 import { summaryStore, positionsStore, marketStore } from '../store/index.js';
 import { isMarketOpen } from '../utils/marketHours.js';
+import { showActiveLotsModal } from './PositionsPage.js';
 
 let currentSortField = 'weight';
 let currentSortOrder = 'desc';
@@ -550,7 +551,7 @@ function updatePositionTable(positions, rates) {
       <tr class="table__row table__row--hoverable">
         <td class="table__td">
           <div class="table__stock-name">
-            <span class="table__stock-primary">${pos.name}</span>
+            <span class="table__stock-primary pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); border-bottom:1px dashed var(--color-primary);" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细 (${pos.name})">${pos.name}</span>
           </div>
         </td>
         <td class="table__td table__td--mono">${pos.symbol}</td>
@@ -576,6 +577,25 @@ function updatePositionTable(positions, rates) {
       </tr>
     `;
   }).join('');
+
+  bindPositionTableEvents();
+}
+
+function bindPositionTableEvents() {
+  const tbody = document.getElementById('positions-tbody');
+  if (!tbody) return;
+
+  tbody.querySelectorAll('.pos-name-click').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { id, symbol, name, currency } = btn.dataset;
+      const pos = cachedPositions.find(p => (p.symbol || '').toUpperCase() === symbol.toUpperCase());
+      if (pos && pos.activeLots && pos.activeLots.length > 0) {
+        showActiveLotsModal({ id, name, symbol }, currency, pos.activeLots);
+      } else {
+        alert('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
+      }
+    });
+  });
 }
 
 

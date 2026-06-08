@@ -174,7 +174,7 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
 
 // ── 逐笔明细弹窗 ─────────────────────────────────────────────────────────────
 
-function showActiveLotsModal(pos, currency, activeLots) {
+export function showActiveLotsModal(pos, currency, activeLots) {
   document.getElementById('active-lots-modal')?.remove();
 
   const overlay = document.createElement('div');
@@ -201,7 +201,7 @@ function showActiveLotsModal(pos, currency, activeLots) {
   overlay.innerHTML = `
     <div style="
       background:var(--color-surface,#1e1e2e);border:1px solid var(--color-border,#374151);
-      border-radius:16px;padding:32px;max-width:900px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.5);
+      border-radius:16px;padding:32px;max-width:1200px;width:95%;box-shadow:0 20px 60px rgba(0,0,0,0.5);
       max-height: 90vh; display: flex; flex-direction: column;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
