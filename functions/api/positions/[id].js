@@ -339,7 +339,10 @@ export async function onRequestDelete(context) {
     );
   }
 
-  await env.DB.prepare('DELETE FROM positions WHERE id = ?1').bind(id).run();
+  const deleteTradesStmt = env.DB.prepare('DELETE FROM trades WHERE position_id = ?1').bind(id);
+  const deletePositionStmt = env.DB.prepare('DELETE FROM positions WHERE id = ?1').bind(id);
+  
+  await env.DB.batch([deleteTradesStmt, deletePositionStmt]);
 
   return Response.json({ success: true, data: { deleted: id } });
 }

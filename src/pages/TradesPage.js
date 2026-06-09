@@ -23,23 +23,6 @@ function fmtNative(amount, currency, showSign = false) {
 }
 
 export async function renderTradesPage(container) {
-  let symbols = [];
-  let symbolMap = {};
-  try {
-    const allTrades = await get('/api/trades');
-    if (Array.isArray(allTrades)) {
-      allTrades.forEach(t => {
-        if (t.symbol && !symbolMap[t.symbol]) {
-          symbolMap[t.symbol] = t.name || '';
-          symbols.push(t.symbol);
-        }
-      });
-      symbols.sort();
-    }
-  } catch (e) {
-    console.error('Failed to load symbols for filter', e);
-  }
-
   container.innerHTML = `
     <div class="page-container animate-fade-in-up">
       <div class="page-header">
@@ -68,7 +51,6 @@ export async function renderTradesPage(container) {
           </select>
           <select id="filter-symbol" class="select" style="width:150px;">
             <option value="">全部股票</option>
-            ${symbols.map(sym => `<option value="${sym}">${sym}</option>`).join('')}
           </select>
           <button id="btn-search" class="btn btn--ghost">查询</button>
         </div>
@@ -147,6 +129,7 @@ export async function renderTradesPage(container) {
     </div>
   `;
 
+  await loadSymbols();
   await loadTrades();
 
   container.querySelector('#trades-tbody')?.addEventListener('click', (e) => {
@@ -193,6 +176,7 @@ export async function renderTradesPage(container) {
       await put(`/api/trades/${id}`, payload);
       document.getElementById('edit-trade-modal').style.display = 'none';
       await loadTrades();
+      await loadSymbols();
     } catch (err) {
       alert('修改失败: ' + err.message);
     } finally {
@@ -236,6 +220,7 @@ export async function renderTradesPage(container) {
       await del(`/api/trades/${deleteTradeId}`);
       document.getElementById('delete-trade-modal').style.display = 'none';
       await loadTrades();
+      await loadSymbols();
     } catch (err) {
       alert('删除失败: ' + err.message);
     } finally {
@@ -246,6 +231,49 @@ export async function renderTradesPage(container) {
   });
 
   container.querySelector('#btn-search')?.addEventListener('click', loadTrades);
+}
+
+async function loadSymbols() {
+  const selectEl = document.getElementById('filter-symbol');
+  if (!selectEl) return;
+  const currentVal = selectEl.value;
+
+  let symbols = [];
+  let symbolMap = {};
+  try {
+    const allTrades = await get('/api/trades');
+    if (Array.isArray(allTrades)) {
+      allTrades.forEach(t => {
+        if (t.symbol && !symbolMap[t.symbol]) {
+          symbolMap[t.symbol] = t.name || '';
+          symbols.push(t.symbol);
+        }
+      });
+      symbols.sort();
+    }
+  } catch (e) {
+    console.error('Failed to load symbols for filter', e);
+  }
+
+  selectEl.innerHTML = '<option value="">全部股票</option>' + 
+    symbols.map(sym => `<option value="${sym}">${sym}</option>`).join('');
+  
+  if (symbols.includes(currentVal)) {
+    selectEl.value = currentVal;
+  }
+}
+
+async function get(endpoint, params = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null && value !== '') {
+      query.append(key, value);
+    }
+  }
+  query.append('_t', Date.now()); // cache busting
+  const queryStr = query.toString();
+  const url = queryStr ? `${endpoint}?${queryStr}` : endpoint;
+  return request(url, { method: 'GET' });
 }
 
 async function loadTrades() {
