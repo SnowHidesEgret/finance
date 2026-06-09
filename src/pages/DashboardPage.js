@@ -6,7 +6,7 @@
 import { formatCurrency, formatPercent, formatNumber, getPnLClass, formatQuantity } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get } from '../services/api.js';
-import { getExchangeRates } from '../services/exchangeRate.js';
+import { getExchangeRates, getRateToCNY } from '../services/exchangeRate.js';
 import { getQuotes } from '../services/stockApi.js';
 import { summaryStore, positionsStore, marketStore } from '../store/index.js';
 import { isMarketOpen } from '../utils/marketHours.js';
@@ -16,6 +16,7 @@ let currentSortField = 'weight';
 let currentSortOrder = 'desc';
 let cachedPositions = [];
 let cachedMarketSummaries = {};
+let cachedTotalPnl = 0;
 
 /**
  * 渲染仪表盘页面
@@ -38,10 +39,10 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__sparkline" id="sparkline-value"></div>
           </div>
         </div>
-        <div class="kpi-card kpi-card--pnl animate-fade-in-up delay-2" id="kpi-total-pnl">
+        <div class="kpi-card kpi-card--pnl animate-fade-in-up delay-2" id="kpi-total-pnl" style="cursor:pointer;" title="点击查看盈亏明细">
           <div class="kpi-card__icon">📈</div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">总盈亏</div>
+            <div class="kpi-card__label">持仓盈亏</div>
             <div class="kpi-card__value" id="val-total-pnl">--</div>
             <div class="kpi-card__sub" id="val-total-pnl-pct">--</div>
           </div>
@@ -175,6 +176,14 @@ export async function renderDashboardPage(container) {
     });
   });
   
+  // 绑定持仓盈亏点击事件
+  const totalPnlCard = container.querySelector('#kpi-total-pnl');
+  if (totalPnlCard) {
+    totalPnlCard.addEventListener('click', () => {
+      showTotalPnLModal(cachedTotalPnl);
+    });
+  }
+
   // 绑定今日盈亏点击事件
   const dayPnlCard = container.querySelector('#kpi-day-pnl');
   if (dayPnlCard) {
@@ -296,6 +305,7 @@ function updateKPICards(data) {
   const totalValue = data.totalValueCNY || data.totalValue || 0;
   const totalCost = data.totalCostCNY || data.totalCost || 0;
   const totalPnl = data.totalPnlCNY || data.totalPnl || totalValue - totalCost;
+  cachedTotalPnl = totalPnl;
   const pnlPercent = data.totalPnlPercent || (totalCost > 0 ? (totalPnl / totalCost) * 100 : 0);
   const dayPnl = data.dayPnl || data.totalDayPnL || 0;
   const count = data.positionCount || 0;
@@ -304,7 +314,13 @@ function updateKPICards(data) {
   
   const pnlEl = document.getElementById('val-total-pnl');
   if (pnlEl) {
-    pnlEl.textContent = formatCurrency(totalPnl, 'CNY', true);
+    if (totalPnl == null || isNaN(totalPnl)) {
+      pnlEl.textContent = '--';
+    } else {
+      const pnlWan = Math.abs(totalPnl) / 10000;
+      const sign = totalPnl > 0 ? '+' : (totalPnl < 0 ? '-' : '');
+      pnlEl.textContent = `${sign}¥${pnlWan.toFixed(2)}万`;
+    }
     pnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(totalPnl)}`;
   }
   
@@ -820,6 +836,108 @@ async function showDayPnLModal(positions) {
     }
   } catch (err) {
     console.error('Failed to load pnlBar chart:', err);
+  }
+}
+
+/**
+ * 显示持仓盈亏和已平仓盈亏明细弹窗
+ */
+async function showTotalPnLModal(openPnl) {
+  document.getElementById('total-pnl-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'total-pnl-modal';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center; z-index: 9999;
+    animation: fadeIn 0.15s ease;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+      border-radius:20px; padding:24px; width:400px; max-width:95vw; 
+      box-shadow:var(--shadow-lg); display:flex; flex-direction:column; align-items: center; justify-content: center;
+    ">
+      <h3 style="margin-top:0; margin-bottom:16px;">盈亏明细加载中...</h3>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  try {
+    const trades = await get('/api/trades').catch(() => []);
+    const rates = await getExchangeRates().catch(() => ({ CNY: 1, USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }));
+    
+    let totalClosedPnl = 0;
+    if (Array.isArray(trades)) {
+      for (const t of trades) {
+        if (t.trade_type === 'SELL' && t.realized_pnl != null) {
+          const currency = t.currency || (MARKETS[t.market] ? MARKETS[t.market].currency : 'CNY');
+          const currentRateToCny = await getRateToCNY(currency, rates);
+          totalClosedPnl += t.realized_pnl * currentRateToCny;
+        }
+      }
+    }
+
+    const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+    function fmtExactPnL(amount, currency = 'CNY') {
+      const sym = CURRENCY_SYMBOL[currency] || '';
+      const num = Number(amount);
+      const absNum = Math.abs(num);
+      const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (num < 0) return `-${sym}${formattedAbs}`;
+      if (num > 0) return `+${sym}${formattedAbs}`;
+      return `${sym}${formattedAbs}`;
+    }
+
+    overlay.innerHTML = `
+      <div style="
+        background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+        border-radius:20px; padding:24px; width:400px; max-width:95vw; 
+        box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
+      ">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+          <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
+            📈 盈亏明细
+          </h3>
+          <button id="close-total-pnl" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+            <span style="color: var(--color-text-muted);">持仓盈亏</span>
+            <span class="market-summary-card__stat-value--${getPnLClass(openPnl)}" style="font-size: 1.1rem; font-weight: 600;">${fmtExactPnL(openPnl, 'CNY')}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 12px;">
+            <span style="color: var(--color-text-muted);">已平仓盈亏</span>
+            <span class="market-summary-card__stat-value--${getPnLClass(totalClosedPnl)}" style="font-size: 1.1rem; font-weight: 600;">${fmtExactPnL(totalClosedPnl, 'CNY')}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; margin-top: 8px;">
+            <span style="color: var(--color-text-regular); font-weight: 600;">累计总盈亏</span>
+            <span class="market-summary-card__stat-value--${getPnLClass(openPnl + totalClosedPnl)}" style="font-size: 1.2rem; font-weight: 700;">${fmtExactPnL(openPnl + totalClosedPnl, 'CNY')}</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    overlay.querySelector('#close-total-pnl').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+
+  } catch (error) {
+    console.error('Failed to load total pnl:', error);
+    overlay.innerHTML = `
+      <div style="
+        background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
+        border-radius:20px; padding:24px; width:400px; max-width:95vw; 
+        box-shadow:var(--shadow-lg); display:flex; flex-direction:column; align-items: center; justify-content: center;
+      ">
+        <h3 style="margin-top:0; margin-bottom:16px;">加载失败</h3>
+        <button id="close-total-pnl" class="btn btn--primary">关闭</button>
+      </div>
+    `;
+    overlay.querySelector('#close-total-pnl').addEventListener('click', () => overlay.remove());
   }
 }
 

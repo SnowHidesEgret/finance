@@ -19,8 +19,8 @@ export function calculatePositionPnL(position, currentPrice, rateToCNY) {
     open_rate_to_cny, currency
   } = position;
   
-  const openRate = open_rate_to_cny || (currency === 'CNY' ? 1 : rateToCNY);
   const currentRate = currency === 'CNY' ? 1 : rateToCNY;
+  const openRate = currentRate; // 按实时汇率计算，忽略开仓时的历史汇率
   
   // 成本 (CNY)
   const costInOriginal = open_price * quantity + commission;
@@ -65,7 +65,7 @@ export function calculatePositionPnL(position, currentPrice, rateToCNY) {
  * @param {Object} position - 已平仓持仓
  * @returns {Object} 实际盈亏
  */
-export function calculateClosedPnL(position) {
+export function calculateClosedPnL(position, currentRateToCny = null) {
   const {
     open_price, close_price, quantity,
     commission = 0, close_commission = 0,
@@ -73,10 +73,13 @@ export function calculateClosedPnL(position) {
     open_date, close_date
   } = position;
   
-  if (!close_price || !close_rate_to_cny) return null;
+  if (!close_price) return null;
   
-  const costCNY = toFixed2((open_price * quantity + commission) * open_rate_to_cny);
-  const proceedsCNY = toFixed2((close_price * quantity - close_commission) * close_rate_to_cny);
+  const openRate = currentRateToCny || open_rate_to_cny || 1;
+  const closeRate = currentRateToCny || close_rate_to_cny || openRate;
+  
+  const costCNY = toFixed2((open_price * quantity + commission) * openRate);
+  const proceedsCNY = toFixed2((close_price * quantity - close_commission) * closeRate);
   const realizedPnL = toFixed2(proceedsCNY - costCNY);
   const realizedPnLPercent = costCNY !== 0 ? toFixed2((realizedPnL / costCNY) * 100) : 0;
   

@@ -263,19 +263,6 @@ async function loadSymbols() {
   }
 }
 
-async function get(endpoint, params = {}) {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value != null && value !== '') {
-      query.append(key, value);
-    }
-  }
-  query.append('_t', Date.now()); // cache busting
-  const queryStr = query.toString();
-  const url = queryStr ? `${endpoint}?${queryStr}` : endpoint;
-  return request(url, { method: 'GET' });
-}
-
 async function loadTrades() {
   const tbody = document.getElementById('trades-tbody');
   if (!tbody) return;
