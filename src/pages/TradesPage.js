@@ -23,6 +23,23 @@ function fmtNative(amount, currency, showSign = false) {
 }
 
 export async function renderTradesPage(container) {
+  let symbols = [];
+  let symbolMap = {};
+  try {
+    const allTrades = await get('/api/trades');
+    if (Array.isArray(allTrades)) {
+      allTrades.forEach(t => {
+        if (t.symbol && !symbolMap[t.symbol]) {
+          symbolMap[t.symbol] = t.name || '';
+          symbols.push(t.symbol);
+        }
+      });
+      symbols.sort();
+    }
+  } catch (e) {
+    console.error('Failed to load symbols for filter', e);
+  }
+
   container.innerHTML = `
     <div class="page-container animate-fade-in-up">
       <div class="page-header">
@@ -48,6 +65,10 @@ export async function renderTradesPage(container) {
             <option value="">全部类型</option>
             <option value="BUY">买入 (BUY)</option>
             <option value="SELL">卖出 (SELL)</option>
+          </select>
+          <select id="filter-symbol" class="select" style="width:150px;">
+            <option value="">全部股票</option>
+            ${symbols.map(sym => `<option value="${sym}">${sym}</option>`).join('')}
           </select>
           <button id="btn-search" class="btn btn--ghost">查询</button>
         </div>
@@ -233,6 +254,7 @@ async function loadTrades() {
 
   const market = document.getElementById('filter-market')?.value || '';
   const type = document.getElementById('filter-type')?.value || '';
+  const symbol = document.getElementById('filter-symbol')?.value || '';
 
   tbody.innerHTML = `<tr><td colspan="10" class="table__empty">加载中...</td></tr>`;
 
@@ -249,6 +271,9 @@ async function loadTrades() {
     
     if (type) {
         trades = trades.filter(t => t.trade_type === type);
+    }
+    if (symbol) {
+        trades = trades.filter(t => t.symbol === symbol);
     }
 
     currentTrades = trades;
