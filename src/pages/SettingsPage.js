@@ -1,7 +1,7 @@
 /**
  * StockVault — 设置页
  */
-import { put } from '../services/api.js';
+import { get, put } from '../services/api.js';
 import { getColorScheme, setColorScheme } from '../utils/colorScheme.js';
 import { getAppTheme, setAppTheme } from '../utils/appTheme.js';
 import { getFontSize, setFontSize } from '../utils/fontSize.js';
@@ -11,6 +11,13 @@ export async function renderSettingsPage(container) {
   const currentScheme = getColorScheme();
   const currentTheme = getAppTheme();
   const currentFontSize = getFontSize();
+  
+  let apiSettings = { finnhub_api_key: '', alpha_vantage_api_key: '' };
+  try {
+    apiSettings = await get('/api/settings');
+  } catch (err) {
+    console.error('[Settings] Failed to fetch API settings:', err);
+  }
   
   container.innerHTML = `
     <div class="page-container animate-fade-in-up">
@@ -93,6 +100,24 @@ export async function renderSettingsPage(container) {
           </div>
         </div>
 
+      </div>
+
+      <div class="card" style="max-width: 600px; margin-top: 24px;">
+        <h3 style="margin-bottom:24px; font-size:1.1rem; border-bottom:1px solid var(--color-border); padding-bottom:12px;">第三方 API 密钥配置</h3>
+        <form id="api-settings-form">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.875rem; color:var(--color-text-secondary)">Finnhub API Key</label>
+            <input type="password" id="finnhub-api-key" class="input" placeholder="输入 Finnhub API 密钥" value="${apiSettings.finnhub_api_key || ''}">
+            <p style="font-size:0.75rem; color:var(--color-text-muted); margin-top:4px;">用于获取海外股票/ETF及指数的辅助实时行情。</p>
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label" style="font-size:0.875rem; color:var(--color-text-secondary)">Alpha Vantage API Key</label>
+            <input type="password" id="alpha-vantage-api-key" class="input" placeholder="输入 Alpha Vantage API 密钥" value="${apiSettings.alpha_vantage_api_key || ''}">
+            <p style="font-size:0.75rem; color:var(--color-text-muted); margin-top:4px;">用于查询外汇、大宗商品（如现货黄金）等多元资产数据。</p>
+          </div>
+          <div id="api-msg" style="font-size:0.875rem; margin-bottom:16px; display:none;"></div>
+          <button type="submit" class="btn btn--primary" id="api-btn">保存 API 设置</button>
+        </form>
       </div>
 
       <div class="card" style="max-width: 600px; margin-top: 24px;">
@@ -181,6 +206,43 @@ export async function renderSettingsPage(container) {
     logoutBtn.addEventListener('click', () => {
       localStorage.removeItem('auth_token');
       window.location.hash = '#/login';
+    });
+  }
+
+  const apiForm = document.getElementById('api-settings-form');
+  if (apiForm) {
+    apiForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const finnhubKey = document.getElementById('finnhub-api-key').value.trim();
+      const alphaVantageKey = document.getElementById('alpha-vantage-api-key').value.trim();
+      const msgEl = document.getElementById('api-msg');
+      const btn = document.getElementById('api-btn');
+      
+      try {
+        btn.disabled = true;
+        btn.textContent = '保存中...';
+        msgEl.style.display = 'none';
+        
+        await put('/api/settings', {
+          finnhub_api_key: finnhubKey,
+          alpha_vantage_api_key: alphaVantageKey
+        });
+        
+        msgEl.style.color = 'var(--color-loss)';
+        msgEl.textContent = 'API 密钥保存成功！';
+        msgEl.style.display = 'block';
+        
+        setTimeout(() => {
+          msgEl.style.display = 'none';
+        }, 3000);
+      } catch (err) {
+        msgEl.style.color = 'var(--color-profit)';
+        msgEl.textContent = err.message || '保存失败';
+        msgEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '保存 API 设置';
+      }
     });
   }
 }

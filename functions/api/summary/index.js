@@ -406,6 +406,7 @@ async function fetchYtdPrice(yfSymbol) {
       annualizedReturn,
       monthlyReturn,
       dayPnLCNY: dayChangeCNY,
+      ytdPnLCNY: posYtdPnlCNY,
       hasLivePrice,
       activeLots: processedLots,
       weight: 0, // calculated below

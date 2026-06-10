@@ -92,9 +92,41 @@ export async function onRequestGet(context) {
   let quote = null;
 
   try {
-    // A) All Indices (Domestic & International) -> Sina Finance
+    // A) Finnhub API (Forex & Crypto)
+    if (symbol.startsWith('OANDA:') || symbol.startsWith('BINANCE:') || symbol.startsWith('CRYPTO:')) {
+      const stmt = await db.prepare("SELECT value FROM user_settings WHERE key = 'finnhub_api_key'").first();
+      const finnhubKey = stmt ? stmt.value : '';
+      if (!finnhubKey) throw new Error('未配置 Finnhub API 密钥，无法查询该代码。');
+      
+      const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${finnhubKey}`;
+      const finnhubResp = await fetch(finnhubUrl);
+      if (!finnhubResp.ok) {
+        if (finnhubResp.status === 401) throw new Error('Finnhub API 密钥无效或受限');
+        throw new Error(`Finnhub returned HTTP ${finnhubResp.status}`);
+      }
+      
+      const finnhubData = await finnhubResp.json();
+      if (!finnhubData || (finnhubData.c === 0 && finnhubData.pc === 0)) {
+        throw new Error(`Finnhub 无法找到关于 ${symbol} 的报价数据`);
+      }
+      
+      quote = {
+        symbol: symbol,
+        price: finnhubData.c,
+        changeAmount: finnhubData.d || (finnhubData.c - finnhubData.pc),
+        changePercent: finnhubData.dp || (finnhubData.pc ? ((finnhubData.c - finnhubData.pc) / finnhubData.pc * 100) : 0),
+        high: finnhubData.h || 0,
+        low: finnhubData.l || 0,
+        volume: 0,
+        prevClose: finnhubData.pc,
+        open: finnhubData.o || finnhubData.pc,
+        latestTradingDay: new Date().toISOString().split('T')[0],
+        currency: 'USD'
+      };
+    }
+    // B) All Indices (Domestic & International) -> Sina Finance
     // (Tencent blocks Cloudflare IPs, and Finnhub blocks CFD indices on free tier)
-    if (symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX')) {
+    else if (symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX')) {
       let sinaSymbol = '';
       let format = ''; // 'A' for domestic, 'B' for US gb_, 'C' for HK rt_
       

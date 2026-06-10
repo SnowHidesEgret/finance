@@ -204,7 +204,7 @@ export async function renderDashboardPage(container) {
   const ytdCard = container.querySelector('#kpi-ytd');
   if (ytdCard) {
     ytdCard.addEventListener('click', () => {
-      showYtdModal(cachedMarketSummaries);
+      showYtdModal(cachedPositions);
     });
   }
   
@@ -1265,9 +1265,9 @@ function showReturnRatesModal(marketSummaries) {
 }
 
 /**
- * 显示各市场 YTD 收益明细弹窗
+ * 显示各股票 YTD 收益明细弹窗 (柱状图)
  */
-function showYtdModal(marketSummaries) {
+async function showYtdModal(positions) {
   document.getElementById('ytd-modal')?.remove();
 
   const overlay = document.createElement('div');
@@ -1278,69 +1278,44 @@ function showYtdModal(marketSummaries) {
     animation: fadeIn 0.15s ease;
   `;
 
-  let totalYtd = 0;
-  const rowsHtml = MARKET_IDS.map(id => {
-    const data = marketSummaries[id];
-    if (!data || data.positionCount === 0) return '';
-    const market = MARKETS[id];
-    const ytdPnl = data.ytdPnlCNY || 0;
-    totalYtd += ytdPnl;
-    
-    return `
-      <tr class="table__row">
-        <td class="table__td">
-          <div style="display:flex; align-items:center; gap:8px;">
-            ${market.flag} <span style="font-weight:600">${market.label}</span>
-          </div>
-        </td>
-        <td class="table__td table__td--right">
-          ${data.positionCount} 笔
-        </td>
-        <td class="table__td table__td--right table__td--mono">
-          ${formatCurrency(data.totalValue || 0)}
-        </td>
-        <td class="table__td table__td--right table__td--mono table__td--${getPnLClass(ytdPnl)}">
-          ${formatCurrency(ytdPnl, 'CNY', true)}
-        </td>
-        <td class="table__td table__td--right table__td--${getPnLClass(data.ytdPercent || 0)}">
-          ${formatPercent(data.ytdPercent || 0)}
-        </td>
-      </tr>
-    `;
-  }).join('');
+  // 准备图表数据 (包含已平仓及未平仓，并过滤掉 YTD 变化为 0 的项)
+  const chartData = positions.map(p => {
+    const pnl = p.ytdPnLCNY || 0;
+    const pnlPercent = p.ytdPercent || 0;
+    const suffix = p.status === 'CLOSED' ? ' (已平仓)' : '';
+    return { name: p.name + suffix, pnl: pnl, pnlPercent: pnlPercent };
+  }).filter(p => p.pnl !== 0).sort((a, b) => b.pnl - a.pnl);
+
+  const totalYtd = chartData.reduce((sum, item) => sum + item.pnl, 0);
+
+  const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+  function fmtExactPnL(amount, currency = 'CNY') {
+    const sym = CURRENCY_SYMBOL[currency] || '';
+    const num = Number(amount);
+    const absNum = Math.abs(num);
+    const formattedAbs = absNum.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (num < 0) return `-${sym}${formattedAbs}`;
+    if (num > 0) return `+${sym}${formattedAbs}`;
+    return `${sym}${formattedAbs}`;
+  }
 
   overlay.innerHTML = `
     <div style="
       background:var(--color-bg-card,#1e1e2e); border:1px solid var(--color-border,#374151);
-      border-radius:20px; padding:24px; width:max-content; min-width:500px; max-width:95vw; 
+      border-radius:20px; padding:24px; width:800px; max-width:95vw; 
       box-shadow:var(--shadow-lg); display:flex; flex-direction:column;
     ">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
         <h3 style="margin:0; font-size:1.25rem; display:flex; align-items:center; gap:8px;">
-          📅 各市场 YTD 收益明细
-          <span class="market-summary-card__stat-value--${getPnLClass(totalYtd)}" style="font-size:1rem;">
-            合计 ${formatCurrency(totalYtd, 'CNY', true)}
+          📅 各股票 YTD 收益排名
+          <span class="market-summary-card__stat-value--${getPnLClass(totalYtd)}" style="font-size:1rem; margin-left:12px;">
+            合计 ${fmtExactPnL(totalYtd, 'CNY')}
           </span>
         </h3>
         <button id="close-ytd-modal" class="btn btn--icon btn--ghost" style="border-radius:50%; width:32px; height:32px;">✕</button>
       </div>
       
-      <div class="table-wrapper" style="border-radius:12px;">
-        <table class="table" style="width:100%;">
-          <thead style="background:var(--color-bg-card);">
-            <tr>
-              <th class="table__th">市场</th>
-              <th class="table__th table__th--right">持仓</th>
-              <th class="table__th table__th--right">总市值(CNY)</th>
-              <th class="table__th table__th--right">YTD 收益(CNY)</th>
-              <th class="table__th table__th--right">YTD 收益率</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml || '<tr><td colspan="5" class="table__empty">暂无持仓</td></tr>'}
-          </tbody>
-        </table>
-      </div>
+      <div id="ytd-pnl-chart-container" style="height: 400px; width: 100%;"></div>
     </div>
   `;
 
@@ -1348,5 +1323,16 @@ function showYtdModal(marketSummaries) {
 
   overlay.querySelector('#close-ytd-modal').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  // 加载并渲染图表
+  try {
+    const { renderPnLBar } = await import('../charts/pnlBar.js');
+    const container = overlay.querySelector('#ytd-pnl-chart-container');
+    if (container) {
+      renderPnLBar(container, chartData);
+    }
+  } catch (err) {
+    console.error('Failed to load pnlBar chart:', err);
+  }
 }
 

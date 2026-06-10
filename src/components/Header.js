@@ -52,8 +52,8 @@ export function renderHeader(container) {
       </div>
       
       <div class="header__center" style="flex: 1; justify-content: flex-end; padding-right: 24px;">
-        <div class="header__marquee-wrapper" id="global-marquee-wrapper" style="overflow: hidden; display: flex; align-items: center; max-width: 500px; width: 100%;">
-          <div class="header__marquee-content" id="index-marquee" style="display: flex; gap: 32px; animation: marquee-scroll 25s linear infinite;">
+        <div class="header__marquee-wrapper" id="global-marquee-wrapper" style="overflow: hidden; display: flex; align-items: center; max-width: 750px; width: 100%;">
+          <div class="header__marquee-content" id="index-marquee" style="display: flex; gap: 32px; animation: marquee-scroll 35s linear infinite;">
             <!-- Data will be loaded here -->
           </div>
         </div>
@@ -128,6 +128,8 @@ export async function loadIndexMarqueeData() {
     { symbol: '^IXIC', name: '纳斯达克' },
     { symbol: '000300.SS', name: '沪深300' },
     { symbol: '^HSI', name: '恒生指数' },
+    { symbol: 'OANDA:XAU_USD', name: '现货黄金' },
+    { symbol: 'BINANCE:BTCUSDT', name: '比特币' },
     { symbol: '^VIX', name: 'VIX恐慌' }
   ];
 

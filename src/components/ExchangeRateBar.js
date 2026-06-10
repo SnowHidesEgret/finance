@@ -4,6 +4,7 @@
 
 import { getFormattedRates, getLastUpdated, getExchangeRates } from '../services/exchangeRate.js';
 import { formatDate } from '../utils/format.js';
+import { getQuotes } from '../services/stockApi.js';
 
 /** @type {number|null} */
 let refreshTimer = null;
@@ -54,7 +55,20 @@ async function updateRates(force = false) {
       await getExchangeRates(true);
     }
     
-    const rates = await getFormattedRates();
+    const [rates, quotes] = await Promise.all([
+      getFormattedRates(),
+      getQuotes(['DX-Y.NYB']).catch(() => new Map()) // 即使获取失败也不影响主体汇率显示
+    ]);
+    
+    const dxyQuote = quotes.get('DX-Y.NYB');
+    if (dxyQuote && dxyQuote.price) {
+      rates.push({
+        pair: '美元指数',
+        rate: dxyQuote.price,
+        display: `美元指数 ${dxyQuote.price.toFixed(2)}`
+      });
+    }
+
     const display = document.getElementById('rate-display');
     const timeEl = document.getElementById('rate-time');
     
@@ -62,7 +76,7 @@ async function updateRates(force = false) {
       display.innerHTML = rates.map(r => `
         <span class="exchange-rate-bar__item">
           <span class="exchange-rate-bar__pair">${r.pair}</span>
-          <span class="exchange-rate-bar__value">${r.rate.toFixed(4)}</span>
+          <span class="exchange-rate-bar__value">${r.rate.toFixed(r.pair === '美元指数' ? 2 : 4)}</span>
         </span>
       `).join('<span class="exchange-rate-bar__divider">│</span>');
     }
