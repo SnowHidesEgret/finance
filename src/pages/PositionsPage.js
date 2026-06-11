@@ -6,6 +6,8 @@
 
 import { formatPercent, formatQuantity, getPnLClass, calcHoldingDays } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
+import { summaryStore, positionsStore, marketStore } from '../store/index.js';
+import { Toast } from '../utils/toast.js';
 import { get, put, del } from '../services/api.js';
 
 /** 货币 → 符号 */
@@ -148,12 +150,12 @@ function showCloseModal(pos, currentPrice, currency, onConfirm) {
     const quantityInput = overlay.querySelector('#close-quantity').value;
 
     if (!dateInput || !priceInput || !quantityInput) {
-      alert('请输入平仓日期、价格和数量');
+      Toast.warning('请输入平仓日期、价格和数量');
       return;
     }
     
     if (parseFloat(quantityInput) > pos.quantity) {
-      alert(`平仓数量不能超过持仓总量 (${pos.quantity})`);
+      Toast.warning(`平仓数量不能超过持仓总量 (${pos.quantity})`);
       return;
     }
 
@@ -536,7 +538,7 @@ function bindTableEvents() {
       if (live && live.activeLots && live.activeLots.length > 0) {
         showActiveLotsModal({ id, name, symbol }, currency, live.activeLots);
       } else {
-        alert('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
+        Toast.info('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
       }
     });
   });
@@ -550,7 +552,7 @@ function bindTableEvents() {
           await del(`/api/positions/${id}`);
           await loadPositions(); // 刷新整个数据（包括重新请求）
         } catch (err) {
-          alert(`删除失败: ${err.message}`);
+          Toast.error(`删除失败: ${err.message}`);
         }
       });
     });
@@ -568,7 +570,7 @@ function bindTableEvents() {
           });
           await loadPositions(); // 刷新整个数据（包括重新请求）
         } catch (err) {
-          alert(`平仓失败: ${err.message}`);
+          Toast.error(`平仓失败: ${err.message}`);
         }
       });
     });

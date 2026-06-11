@@ -5,6 +5,7 @@
 
 import { get } from './api.js';
 import { API, CACHE_TTL } from '../utils/constants.js';
+import { Toast } from '../utils/toast.js';
 
 /** 内存行情缓存 */
 const quoteCache = new Map();
@@ -43,9 +44,11 @@ export async function getQuote(symbol, forceRefresh = false) {
     const stale = quoteCache.get(symbol);
     if (stale) {
       console.warn(`[StockAPI] Using stale cache for ${symbol}`);
+      Toast.warning(`行情数据获取失败，正在使用 "${symbol}" 的过期缓存。`);
       return stale.data;
     }
     
+    Toast.error(`无法获取 "${symbol}" 的行情数据，请检查网络或该资产是否受支持。`, '行情获取失败');
     return null;
   }
 }

@@ -92,41 +92,61 @@ export async function onRequestGet(context) {
   let quote = null;
 
   try {
-    // A) Finnhub API (Forex & Crypto)
-    if (symbol.startsWith('OANDA:') || symbol.startsWith('BINANCE:') || symbol.startsWith('CRYPTO:')) {
-      const stmt = await db.prepare("SELECT value FROM user_settings WHERE key = 'finnhub_api_key'").first();
-      const finnhubKey = stmt ? stmt.value : '';
-      if (!finnhubKey) throw new Error('未配置 Finnhub API 密钥，无法查询该代码。');
-      
-      const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${finnhubKey}`;
-      const finnhubResp = await fetch(finnhubUrl);
-      if (!finnhubResp.ok) {
-        if (finnhubResp.status === 401) throw new Error('Finnhub API 密钥无效或受限');
-        throw new Error(`Finnhub returned HTTP ${finnhubResp.status}`);
+    const isSinaSymbol = symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX');
+
+    // A) Yahoo Finance (Prioritized for ordinary stocks, crypto, forex, commodities, and VIX)
+    if (!isSinaSymbol) {
+      try {
+        function translateSymbol(sym) {
+          let s = sym.toUpperCase();
+          if (s.endsWith('.HKG')) return s.replace('.HKG', '.HK');
+          if (s.endsWith('.SHH')) return s.replace('.SHH', '.SS');
+          if (s.endsWith('.SHZ')) return s.replace('.SHZ', '.SZ');
+          if (s.endsWith('.SWX')) return s.replace('.SWX', '.SW');
+          
+          // Handle Finnhub-style symbols for Yahoo Finance
+          if (s === 'OANDA:XAU_USD') return 'GC=F'; // Map Gold to Gold Futures
+          if (s === 'BINANCE:BTCUSDT') return 'BTC-USD'; // Map BTC to BTC-USD
+          if (s.startsWith('BINANCE:') && s.endsWith('USDT')) {
+            return s.replace('BINANCE:', '').replace('USDT', '-USD');
+          }
+          if (s.startsWith('BINANCE:') && s.endsWith('BTC')) {
+            return s.replace('BINANCE:', '').replace('BTC', '-BTC');
+          }
+          if (s.startsWith('CRYPTO:')) {
+            return s.replace('CRYPTO:', '') + '-USD';
+          }
+          return s;
+        }
+        const yfSymbol = translateSymbol(symbol);
+        const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&useYfid=true&range=1d`;
+        
+        const yfResponse = await fetch(apiUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json'
+          }
+        });
+
+        if (yfResponse.ok) {
+          const yfData = await yfResponse.json();
+          const result = yfData.chart?.result?.[0];
+          
+          if (result && result.meta) {
+            quote = normaliseQuote(result.meta);
+            quote.symbol = symbol; // Keep the original symbol
+          }
+        } else {
+          console.warn(`[StockAPI] Yahoo Finance returned HTTP ${yfResponse.status} for ${symbol}`);
+        }
+      } catch (e) {
+        console.warn(`[StockAPI] Yahoo Finance fetch failed for ${symbol}:`, e.message);
       }
-      
-      const finnhubData = await finnhubResp.json();
-      if (!finnhubData || (finnhubData.c === 0 && finnhubData.pc === 0)) {
-        throw new Error(`Finnhub 无法找到关于 ${symbol} 的报价数据`);
-      }
-      
-      quote = {
-        symbol: symbol,
-        price: finnhubData.c,
-        changeAmount: finnhubData.d || (finnhubData.c - finnhubData.pc),
-        changePercent: finnhubData.dp || (finnhubData.pc ? ((finnhubData.c - finnhubData.pc) / finnhubData.pc * 100) : 0),
-        high: finnhubData.h || 0,
-        low: finnhubData.l || 0,
-        volume: 0,
-        prevClose: finnhubData.pc,
-        open: finnhubData.o || finnhubData.pc,
-        latestTradingDay: new Date().toISOString().split('T')[0],
-        currency: 'USD'
-      };
     }
+
     // B) All Indices (Domestic & International) -> Sina Finance
     // (Tencent blocks Cloudflare IPs, and Finnhub blocks CFD indices on free tier)
-    else if (symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX')) {
+    if (!quote && isSinaSymbol) {
       let sinaSymbol = '';
       let format = ''; // 'A' for domestic, 'B' for US gb_, 'C' for HK rt_
       
@@ -210,39 +230,42 @@ export async function onRequestGet(context) {
         currency: currency
       };
     }  
-    // C) Other stocks -> Yahoo Finance
-    else {
-      function translateSymbol(sym) {
-        let s = sym.toUpperCase();
-        if (s.endsWith('.HKG')) return s.replace('.HKG', '.HK');
-        if (s.endsWith('.SHH')) return s.replace('.SHH', '.SS');
-        if (s.endsWith('.SHZ')) return s.replace('.SHZ', '.SZ');
-        if (s.endsWith('.SWX')) return s.replace('.SWX', '.SW');
-        return s;
-      }
-      const yfSymbol = translateSymbol(symbol);
-      const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&useYfid=true&range=1d`;
+
+    // C) Finnhub API (Forex & Crypto fallback)
+    if (!quote && (symbol.startsWith('OANDA:') || symbol.startsWith('BINANCE:') || symbol.startsWith('CRYPTO:'))) {
+      const stmt = await db.prepare("SELECT value FROM user_settings WHERE key = 'finnhub_api_key'").first();
+      const finnhubKey = stmt ? stmt.value : '';
       
-      const yfResponse = await fetch(apiUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
+      if (finnhubKey) {
+        try {
+          const finnhubUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${finnhubKey}`;
+          const finnhubResp = await fetch(finnhubUrl);
+          if (finnhubResp.ok) {
+            const finnhubData = await finnhubResp.json();
+            if (finnhubData && (finnhubData.c !== 0 || finnhubData.pc !== 0)) {
+              quote = {
+                symbol: symbol,
+                price: finnhubData.c,
+                changeAmount: finnhubData.d || (finnhubData.c - finnhubData.pc),
+                changePercent: finnhubData.dp || (finnhubData.pc ? ((finnhubData.c - finnhubData.pc) / finnhubData.pc * 100) : 0),
+                high: finnhubData.h || 0,
+                low: finnhubData.l || 0,
+                volume: 0,
+                prevClose: finnhubData.pc,
+                open: finnhubData.o || finnhubData.pc,
+                latestTradingDay: new Date().toISOString().split('T')[0],
+                currency: 'USD'
+              };
+            }
+          }
+        } catch (e) {
+          console.warn(`[StockAPI] Finnhub fallback failed for ${symbol}:`, e.message);
         }
-      });
-
-      if (!yfResponse.ok) {
-        throw new Error(`Yahoo Finance returned HTTP ${yfResponse.status}`);
       }
+    }
 
-      const yfData = await yfResponse.json();
-      const result = yfData.chart?.result?.[0];
-      
-      if (!result || !result.meta) {
-        throw new Error(`No quote data found for symbol: ${symbol}`);
-      }
-
-      quote = normaliseQuote(result.meta);
-      quote.symbol = symbol; // Keep the original symbol
+    if (!quote) {
+      throw new Error(`No quote data found for symbol: ${symbol}`);
     }
 
     // ── 3. Upsert cache ────────────────────────────────────────────────

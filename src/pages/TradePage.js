@@ -2,7 +2,8 @@
  * StockVault — 交易录入页（含股票代码自动匹配）
  */
 import { MARKETS, MARKET_IDS, SECTORS } from '../utils/constants.js';
-import { post } from '../services/api.js';
+import { post, get } from '../services/api.js';
+import { Toast } from '../utils/toast.js';
 import { searchStock } from '../services/stockApi.js';
 import { navigate } from '../router/index.js';
 import { getExchangeRates } from '../services/exchangeRate.js';
@@ -349,10 +350,10 @@ export async function renderTradePage(container) {
       };
       
       await post('/api/positions', data);
-      alert('建仓成功！');
+      Toast.success('建仓成功！');
       navigate('/positions');
     } catch (err) {
-      alert('保存失败: ' + err.message);
+      Toast.error('保存失败: ' + err.message);
       btn.disabled = false;
       btn.textContent = '保存并建仓';
     }

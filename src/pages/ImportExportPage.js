@@ -5,6 +5,7 @@ import { generateTemplateCSV, parseFile, validateAndTransform, autoMapFields } f
 import { exportPositionsCSV, exportTradesCSV } from '../services/exporter.js';
 import { post } from '../services/api.js';
 import { navigate } from '../router/index.js';
+import { Toast } from '../utils/toast.js';
 
 export async function renderImportExportPage(container) {
   container.innerHTML = `
@@ -114,7 +115,7 @@ export async function renderImportExportPage(container) {
       
       if (result.imported > 0) {
         setTimeout(() => {
-          alert('导入成功！');
+          Toast.success('导入成功！');
           navigate('/positions');
         }, 1000);
       }
@@ -134,7 +135,7 @@ export async function renderImportExportPage(container) {
     try {
       await exportPositionsCSV();
     } catch (err) {
-      alert('导出持仓失败: ' + err.message);
+      Toast.error('导出持仓失败: ' + err.message);
     } finally {
       btn.textContent = oldText;
       btn.disabled = false;
@@ -156,7 +157,7 @@ export async function renderImportExportPage(container) {
     const toDate = container.querySelector('#modal-export-to').value;
     
     if (fromDate && toDate && fromDate > toDate) {
-      alert('开始日期不能晚于结束日期');
+      Toast.warning('开始日期不能晚于结束日期');
       return;
     }
 
@@ -168,7 +169,7 @@ export async function renderImportExportPage(container) {
       await exportTradesCSV(fromDate || undefined, toDate || undefined);
       modal.style.display = 'none'; // 导出成功后关闭弹窗
     } catch (err) {
-      alert('导出交易记录失败: ' + err.message);
+      Toast.error('导出交易记录失败: ' + err.message);
     } finally {
       btn.textContent = oldText;
       btn.disabled = false;

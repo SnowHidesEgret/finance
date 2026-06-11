@@ -8,6 +8,7 @@ import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get } from '../services/api.js';
 import { getExchangeRates, getRateToCNY } from '../services/exchangeRate.js';
 import { getQuotes } from '../services/stockApi.js';
+import { Toast } from '../utils/toast.js';
 import { summaryStore, positionsStore, marketStore } from '../store/index.js';
 import { isMarketOpen } from '../utils/marketHours.js';
 import { showActiveLotsModal } from './PositionsPage.js';
@@ -608,7 +609,7 @@ function bindPositionTableEvents() {
       if (pos && pos.activeLots && pos.activeLots.length > 0) {
         showActiveLotsModal({ id, name, symbol }, currency, pos.activeLots);
       } else {
-        alert('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
+        Toast.info('暂无该股票的未平仓逐笔明细数据（仅在持有仓位时显示）。');
       }
     });
   });

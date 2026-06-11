@@ -5,6 +5,7 @@
 import { formatQuantity, getPnLClass } from '../utils/format.js';
 import { MARKETS, MARKET_IDS } from '../utils/constants.js';
 import { get, put, del } from '../services/api.js';
+import { Toast } from '../utils/toast.js';
 
 let currentTrades = [];
 
@@ -178,7 +179,7 @@ export async function renderTradesPage(container) {
       await loadTrades();
       await loadSymbols();
     } catch (err) {
-      alert('修改失败: ' + err.message);
+      Toast.error('修改失败: ' + err.message);
     } finally {
       btnSave.textContent = originalText;
       btnSave.disabled = false;
@@ -222,7 +223,7 @@ export async function renderTradesPage(container) {
       await loadTrades();
       await loadSymbols();
     } catch (err) {
-      alert('删除失败: ' + err.message);
+      Toast.error('删除失败: ' + err.message);
     } finally {
       btnConfirm.textContent = originalText;
       btnConfirm.disabled = false;

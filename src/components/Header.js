@@ -3,6 +3,7 @@
  */
 
 import { navigate } from '../router/index.js';
+import { Toast } from '../utils/toast.js';
 
 /**
  * 渲染顶部导航栏
@@ -64,6 +65,29 @@ export function renderHeader(container) {
           <span class="header__status-dot animate-pulse"></span>
           <span class="header__status-text">就绪</span>
         </div>
+        <div class="notification-wrapper" id="notification-center">
+          <button class="btn btn--ghost btn--icon" id="btn-notifications" title="消息中心">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <div class="notification-badge" style="display: none;">0</div>
+          </button>
+          
+          <div class="notification-dropdown" id="notification-dropdown">
+            <div class="notification-dropdown__header">
+              <h4 class="notification-dropdown__title">消息中心</h4>
+              <div class="notification-dropdown__actions">
+                <button class="notification-dropdown__btn" id="btn-mark-read">全部已读</button>
+                <button class="notification-dropdown__btn" id="btn-clear-msgs">清空</button>
+              </div>
+            </div>
+            <div class="notification-dropdown__list" id="notification-list">
+              <!-- msgs go here -->
+            </div>
+          </div>
+        </div>
+        
         <button class="btn btn--ghost btn--icon" id="btn-refresh" title="刷新行情">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="23 4 23 10 17 10"></polyline>
@@ -104,12 +128,107 @@ export function renderHeader(container) {
   // Load marquee data
   loadIndexMarqueeData();
   
-  // Add pause/resume animation on hover
   const marqueeWrapper = container.querySelector('#global-marquee-wrapper');
   const marqueeContent = container.querySelector('#index-marquee');
   if (marqueeWrapper && marqueeContent) {
     marqueeWrapper.addEventListener('mouseenter', () => marqueeContent.style.animationPlayState = 'paused');
     marqueeWrapper.addEventListener('mouseleave', () => marqueeContent.style.animationPlayState = 'running');
+  }
+
+  // --- Notification Center Logic ---
+  const btnNotif = container.querySelector('#btn-notifications');
+  const dropdownNotif = container.querySelector('#notification-dropdown');
+  const badgeNotif = container.querySelector('.notification-badge');
+  const listNotif = container.querySelector('#notification-list');
+  const wrapperNotif = container.querySelector('#notification-center');
+
+  if (btnNotif && dropdownNotif) {
+    btnNotif.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dropdownNotif.classList.toggle('is-open');
+      if (dropdownNotif.classList.contains('is-open')) {
+        Toast.markAllAsRead();
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!wrapperNotif.contains(e.target)) {
+        dropdownNotif.classList.remove('is-open');
+      }
+    });
+    
+    // Prevent closing when clicking inside dropdown
+    dropdownNotif.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    container.querySelector('#btn-mark-read')?.addEventListener('click', () => {
+      Toast.markAllAsRead();
+    });
+
+    container.querySelector('#btn-clear-msgs')?.addEventListener('click', () => {
+      Toast.clearHistory();
+    });
+
+    // Helper to format time
+    const timeAgo = (ts) => {
+      const sec = Math.floor((Date.now() - ts) / 1000);
+      if (sec < 60) return '刚刚';
+      if (sec < 3600) return `${Math.floor(sec / 60)} 分钟前`;
+      if (sec < 86400) return `${Math.floor(sec / 3600)} 小时前`;
+      return `${Math.floor(sec / 86400)} 天前`;
+    };
+
+    const renderNotifications = (history, unreadCount) => {
+      // Update badge
+      if (unreadCount > 0) {
+        badgeNotif.style.display = 'flex';
+        badgeNotif.textContent = unreadCount > 99 ? '99+' : unreadCount;
+        wrapperNotif.classList.add('has-unread');
+      } else {
+        badgeNotif.style.display = 'none';
+        wrapperNotif.classList.remove('has-unread');
+      }
+
+      // Render list
+      if (history.length === 0) {
+        listNotif.innerHTML = `
+          <div class="notification-empty">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            暂无消息
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      history.forEach(item => {
+        html += `
+          <div class="notification-item notification-item--${item.type}">
+            <div class="notification-item__icon">
+              ${Toast.getIconSvg(item.iconName)}
+            </div>
+            <div class="notification-item__content">
+              <h5 class="notification-item__title">${item.title}</h5>
+              ${item.message ? `<p class="notification-item__message">${item.message}</p>` : ''}
+              <span class="notification-item__time">${timeAgo(item.timestamp)}</span>
+            </div>
+          </div>
+        `;
+      });
+      listNotif.innerHTML = html;
+    };
+
+    // Listen to changes
+    window.addEventListener('toast:change', (e) => {
+      renderNotifications(e.detail.history, e.detail.unreadCount);
+    });
+
+    // Initial render
+    renderNotifications(Toast.getHistory(), Toast.unreadCount);
   }
 }
 

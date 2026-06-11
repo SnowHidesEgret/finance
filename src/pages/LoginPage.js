@@ -1,4 +1,5 @@
 import { post } from '../services/api.js';
+import { Toast } from '../utils/toast.js';
 
 export async function renderLoginPage(container) {
   container.innerHTML = `
@@ -69,7 +70,7 @@ export async function renderLoginPage(container) {
       if (data && data.token) {
         localStorage.setItem('auth_token', data.token);
         if (data.isFirstLogin) {
-          alert('这是您的首次登录，刚才输入的密码已设置为初始密码。请牢记！');
+          Toast.success('这是您的首次登录，刚才输入的密码已设置为初始密码。请牢记！');
         }
         window.location.hash = '#/';
       }

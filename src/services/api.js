@@ -3,6 +3,8 @@
  * 统一调用 Cloudflare Pages Functions API
  */
 
+import { Toast } from '../utils/toast.js';
+
 const BASE_URL = '';  // Same origin — Pages Functions 在同域下
 
 /**
@@ -60,10 +62,18 @@ async function request(endpoint, options = {}) {
     
     return data.data !== undefined ? data.data : data;
   } catch (error) {
-    if (error instanceof ApiError) throw error;
+    if (error instanceof ApiError) {
+      if (error.status !== 401) { // We probably don't want to toast every 401 if it's just redirecting to login, or maybe we do. We will toast it.
+        Toast.error(error.message, `API 请求失败 (${error.status})`);
+      } else {
+        Toast.warning('您的登录已过期，请重新登录。');
+      }
+      throw error;
+    }
     
     // 网络错误
     console.error(`[API] Request failed: ${endpoint}`, error);
+    Toast.error(error.message, '网络请求异常');
     throw new ApiError(`网络错误: ${error.message}`, 0, null);
   }
 }

@@ -7,6 +7,7 @@ import './styles/components.css';
 import './styles/dashboard.css';
 import './styles/charts.css';
 import './styles/animations.css';
+import './styles/toast.css';
 
 import { route, initRouter, navigate, beforeEach } from './router/index.js';
 import { initColorScheme } from './utils/colorScheme.js';
