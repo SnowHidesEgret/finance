@@ -1,6 +1,35 @@
-const sqlite3 = require('better-sqlite3');
-const db = new sqlite3('d:\\Projects\\finance\\.wrangler\\state\\v3\\d1\\miniflare-D1DatabaseObject\\3bf1482bbb6233ea0f7695bdae9cdebb58935840f681dc9d58953c237cf16ff0.sqlite');
-console.log("CLOSED POSITIONS:");
-console.log(db.prepare("SELECT * FROM positions WHERE status='CLOSED'").all());
-console.log("ALL POSITIONS:");
-console.log(db.prepare("SELECT id, status, close_price FROM positions").all());
+const { execSync } = require('child_process');
+
+try {
+  console.log("Fetching local schema...");
+  const localOutput = execSync('npx wrangler d1 execute stockvault-db --command="SELECT sql FROM sqlite_master WHERE type=\'table\' AND name NOT LIKE \'sqlite_%\' AND name != \'d1_migrations\' ORDER BY name;" --local --json').toString();
+  
+  console.log("Fetching remote schema...");
+  const remoteOutput = execSync('npx wrangler d1 execute stockvault-db --command="SELECT sql FROM sqlite_master WHERE type=\'table\' AND name NOT LIKE \'sqlite_%\' AND name != \'d1_migrations\' ORDER BY name;" --remote --json').toString();
+
+  const localData = JSON.parse(localOutput)[0].results.map(r => r.sql);
+  const remoteData = JSON.parse(remoteOutput)[0].results.map(r => r.sql);
+
+  let isSame = true;
+  if (localData.length !== remoteData.length) {
+    isSame = false;
+    console.log(`Table count mismatch: Local=${localData.length}, Remote=${remoteData.length}`);
+  } else {
+    for (let i = 0; i < localData.length; i++) {
+      if (localData[i] !== remoteData[i]) {
+        isSame = false;
+        console.log(`Mismatch in table definition:\nLocal: ${localData[i]}\nRemote: ${remoteData[i]}`);
+      }
+    }
+  }
+
+  if (isSame) {
+    console.log("RESULT: YES, Local and Remote database schemas are exactly the same.");
+  } else {
+    console.log("RESULT: NO, Local and Remote database schemas differ.");
+  }
+} catch (e) {
+  console.error("Error executing commands:", e.message);
+  if (e.stdout) console.error("Stdout:", e.stdout.toString());
+  if (e.stderr) console.error("Stderr:", e.stderr.toString());
+}

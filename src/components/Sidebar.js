@@ -43,7 +43,7 @@ export function renderSidebar(container) {
         ${navHTML}
       </div>
       <div class="sidebar__footer">
-        <div class="sidebar__version">v2.2.1</div>
+        <div class="sidebar__version">v2.3.0</div>
       </div>
     </nav>
   `;
