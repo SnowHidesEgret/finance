@@ -63,13 +63,7 @@ export async function renderDashboardPage(container) {
             <div class="kpi-card__value" id="val-ytd-pct">--</div>
           </div>
         </div>
-        <div class="kpi-card kpi-card--return animate-fade-in-up delay-5" id="kpi-return-rates" style="cursor:pointer;" title="点击查看各国市场年化收益率">
-          <div class="kpi-card__icon">🎯</div>
-          <div class="kpi-card__content">
-            <div class="kpi-card__label">年化收益率</div>
-            <div class="kpi-card__value" id="val-annualized-return">--</div>
-          </div>
-        </div>
+
       </section>
 
       <!-- 各国市场概览 -->
@@ -209,13 +203,7 @@ export async function renderDashboardPage(container) {
     });
   }
   
-  // 绑定收益率点击事件
-  const returnCard = container.querySelector('#kpi-return-rates');
-  if (returnCard) {
-    returnCard.addEventListener('click', () => {
-      showReturnRatesModal(cachedMarketSummaries);
-    });
-  }
+
   
   // 绑定市场概览点击事件
   const marketOverview = container.querySelector('#market-overview');
@@ -358,13 +346,7 @@ function updateKPICards(data) {
     ytdPctEl.className = `kpi-card__value kpi-card__value--${getPnLClass(ytdPct)}`;
   }
   
-  // 收益率卡片
-  const annualizedReturn = data.totalAnnualizedReturn || 0;
-  const annualEl = document.getElementById('val-annualized-return');
-  if (annualEl) {
-    annualEl.textContent = formatPercent(annualizedReturn);
-    annualEl.className = `kpi-card__value kpi-card__value--${getPnLClass(annualizedReturn)}`;
-  }
+
 }
 
 /**
@@ -454,6 +436,9 @@ function renderMarketCard(marketId, data, totalValue = 0) {
         <span class="market-summary-card__name">${market.label}</span>
         <span style="margin-left:8px; font-size:0.8rem; font-weight:600;" class="market-summary-card__stat-value--${getPnLClass(data?.monthlyReturn || 0)}">
           月收益 ${formatPercent(data?.monthlyReturn || 0)}
+        </span>
+        <span style="margin-left:8px; font-size:0.8rem; font-weight:600;" class="market-summary-card__stat-value--${getPnLClass(data?.annualizedReturn || 0)}">
+          年化 ${formatPercent(data?.annualizedReturn || 0)}
         </span>
         <span class="market-summary-card__count">${count} 笔</span>
       </div>

@@ -29,7 +29,7 @@
 /* KPI Row */
 .dashboard__kpi-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
 }
 
@@ -439,7 +439,7 @@
 }
 
 @media (max-width: 1199px) {
-  .dashboard__kpi-row { grid-template-columns: repeat(3, 1fr); }
+  .dashboard__kpi-row { grid-template-columns: repeat(2, 1fr); }
   .dashboard__market-overview { grid-template-columns: repeat(2, 1fr); }
   .dashboard__charts-row { grid-template-columns: 1fr; }
 }
