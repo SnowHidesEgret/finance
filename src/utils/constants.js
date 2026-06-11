@@ -95,7 +95,8 @@ export const API = {
   POSITIONS: '/api/positions',
   TRADES: '/api/trades',
   TRADES_IMPORT: '/api/trades/import',
-  SUMMARY: '/api/summary'
+  SUMMARY: '/api/summary',
+  STOCK_FINNHUB: '/api/stock/finnhub'
 };
 
 /** 汇率 API (Frankfurter — 完全免费、无需 Key) */
@@ -105,7 +106,9 @@ export const FRANKFURTER_API = 'https://api.frankfurter.dev/v1';
 export const CACHE_TTL = {
   QUOTE: 5 * 60 * 1000,        // 行情缓存 5 分钟
   EXCHANGE_RATE: 2 * 60 * 60 * 1000, // 汇率缓存 2 小时
-  SUMMARY: 2 * 60 * 1000       // 汇总缓存 2 分钟
+  SUMMARY: 2 * 60 * 1000,      // 汇总缓存 2 分钟
+  FINNHUB_FINANCIALS: 24 * 60 * 60 * 1000,    // 基本面 24 小时
+  FINNHUB_EARNINGS: 12 * 60 * 60 * 1000       // 财报日历 12 小时
 };
 
 /** 页面路由 */

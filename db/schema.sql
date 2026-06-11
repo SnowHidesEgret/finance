@@ -118,6 +118,15 @@ CREATE TABLE IF NOT EXISTS user_settings (
 );
 
 -- -----------------------------------------------------------
+-- finnhub_cache: cached Finnhub API responses (TTL in code)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS finnhub_cache (
+  cache_key    TEXT PRIMARY KEY,          -- format: "{type}:{symbol}", e.g. "news:AAPL"
+  data         TEXT NOT NULL,             -- JSON string
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- -----------------------------------------------------------
 -- Triggers: auto-update updated_at on positions
 -- -----------------------------------------------------------
 CREATE TRIGGER IF NOT EXISTS trg_positions_updated_at
