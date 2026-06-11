@@ -33,7 +33,7 @@ export async function renderDashboardPage(container) {
       <!-- KPI 指标卡 -->
       <section class="dashboard__kpi-row">
         <div class="kpi-card kpi-card--total animate-fade-in-up delay-1" id="kpi-total-value" style="cursor:pointer;" title="点击查看资产分布">
-          <div class="kpi-card__icon">💰</div>
+          <div class="kpi-card__icon"><i data-lucide="wallet"></i></div>
           <div class="kpi-card__content">
             <div class="kpi-card__label">持仓资产 (CNY)</div>
             <div class="kpi-card__value" id="val-total-value">--</div>
@@ -41,7 +41,7 @@ export async function renderDashboardPage(container) {
           </div>
         </div>
         <div class="kpi-card kpi-card--pnl animate-fade-in-up delay-2" id="kpi-total-pnl" style="cursor:pointer;" title="点击查看盈亏明细">
-          <div class="kpi-card__icon">📈</div>
+          <div class="kpi-card__icon"><i data-lucide="trending-up"></i></div>
           <div class="kpi-card__content">
             <div class="kpi-card__label">持仓盈亏</div>
             <div class="kpi-card__value" id="val-total-pnl">--</div>
@@ -49,7 +49,7 @@ export async function renderDashboardPage(container) {
           </div>
         </div>
         <div class="kpi-card kpi-card--day animate-fade-in-up delay-3" id="kpi-day-pnl" style="cursor:pointer;" title="点击查看今日盈亏明细">
-          <div class="kpi-card__icon">📊</div>
+          <div class="kpi-card__icon"><i data-lucide="activity"></i></div>
           <div class="kpi-card__content">
             <div class="kpi-card__label">今日盈亏</div>
             <div class="kpi-card__value" id="val-day-pnl">--</div>
@@ -57,7 +57,7 @@ export async function renderDashboardPage(container) {
           </div>
         </div>
         <div class="kpi-card kpi-card--cost animate-fade-in-up delay-4" id="kpi-ytd" style="cursor:pointer;" title="点击查看各市场 YTD 收益明细">
-          <div class="kpi-card__icon">📅</div>
+          <div class="kpi-card__icon"><i data-lucide="target"></i></div>
           <div class="kpi-card__content">
             <div class="kpi-card__label">YTD 收益率</div>
             <div class="kpi-card__value" id="val-ytd-pct">--</div>
