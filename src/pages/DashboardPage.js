@@ -299,17 +299,11 @@ function updateKPICards(data) {
   const dayPnl = data.dayPnl || data.totalDayPnL || 0;
   const count = data.positionCount || 0;
   
-  animateValue('val-total-value', totalValue, v => formatCurrency(v));
+  animateValue('val-total-value', totalValue, v => formatCurrency(v, 'CNY', false, false));
   
   const pnlEl = document.getElementById('val-total-pnl');
   if (pnlEl) {
-    if (totalPnl == null || isNaN(totalPnl)) {
-      pnlEl.textContent = '--';
-    } else {
-      const pnlWan = Math.abs(totalPnl) / 10000;
-      const sign = totalPnl > 0 ? '+' : (totalPnl < 0 ? '-' : '');
-      pnlEl.textContent = `${sign}¥${pnlWan.toFixed(2)}万`;
-    }
+    pnlEl.textContent = formatCurrency(totalPnl, 'CNY', true, false);
     pnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(totalPnl)}`;
   }
   
@@ -321,13 +315,7 @@ function updateKPICards(data) {
   
   const dayPnlEl = document.getElementById('val-day-pnl');
   if (dayPnlEl) {
-    if (dayPnl == null || isNaN(dayPnl)) {
-      dayPnlEl.textContent = '--';
-    } else {
-      const dayPnlWan = Math.abs(dayPnl) / 10000;
-      const sign = dayPnl > 0 ? '+' : (dayPnl < 0 ? '-' : '');
-      dayPnlEl.textContent = `${sign}¥${dayPnlWan.toFixed(2)}万`;
-    }
+    dayPnlEl.textContent = formatCurrency(dayPnl, 'CNY', true, false);
     dayPnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(dayPnl)}`;
   }
   

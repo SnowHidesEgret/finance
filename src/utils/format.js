@@ -9,7 +9,7 @@
  * @param {boolean} [showSign=false] - 是否显示正号
  * @returns {string} 格式化后的金额
  */
-export function formatCurrency(amount, currency = 'CNY', showSign = false) {
+export function formatCurrency(amount, currency = 'CNY', showSign = false, useUnits = true) {
   if (amount == null || isNaN(amount)) return '--';
   
   const abs = Math.abs(amount);
@@ -18,9 +18,9 @@ export function formatCurrency(amount, currency = 'CNY', showSign = false) {
   const symbols = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
   const symbol = symbols[currency] || currency + ' ';
   
-  if (abs >= 1e8) {
+  if (useUnits && abs >= 1e8) {
     formatted = `${symbol}${(abs / 1e8).toFixed(2)}亿`;
-  } else if (abs >= 1e4) {
+  } else if (useUnits && abs >= 1e4) {
     formatted = `${symbol}${(abs / 1e4).toFixed(2)}万`;
   } else {
     formatted = `${symbol}${abs.toLocaleString('zh-CN', {

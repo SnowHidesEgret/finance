@@ -159,11 +159,11 @@ function renderOverviewSection(positions, marketSummary) {
       <div class="market-page__kpi-row">
         <div class="market-page__kpi">
           <div class="market-page__kpi-label">市值 (CNY)</div>
-          <div class="market-page__kpi-value">${formatCurrency(totalValue)}</div>
+          <div class="market-page__kpi-value">${formatCurrency(totalValue, 'CNY', false, false)}</div>
         </div>
         <div class="market-page__kpi">
           <div class="market-page__kpi-label">持仓盈亏</div>
-          <div class="market-page__kpi-value ${getPnLClass(totalPnl)}">${formatCurrency(totalPnl, 'CNY', true)}</div>
+          <div class="market-page__kpi-value ${getPnLClass(totalPnl)}">${formatCurrency(totalPnl, 'CNY', true, false)}</div>
         </div>
         <div class="market-page__kpi">
           <div class="market-page__kpi-label">收益率</div>
