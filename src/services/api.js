@@ -37,6 +37,14 @@ async function request(endpoint, options = {}) {
     
     let data;
     const text = await response.text();
+
+    // 提取接口上下文信息（包含股票代码，如果存在）
+    let ctx = `[${endpoint.split('?')[0]}]`;
+    const symbolMatch = endpoint.match(/[?&]symbol=([^&]+)/);
+    if (symbolMatch) {
+      ctx += ` (股票: ${decodeURIComponent(symbolMatch[1])})`;
+    }
+
     if (text) {
       try {
         data = JSON.parse(text);
@@ -44,8 +52,8 @@ async function request(endpoint, options = {}) {
         console.error(`[API] Non-JSON response from ${url}:`, text);
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
         const errorMsg = isLocal
-          ? '服务器响应异常 (非JSON格式)。请检查本地后端服务 (Wrangler) 是否已启动。'
-          : `云端服务器响应异常 (HTTP ${response.status} 非JSON)。请检查 Cloudflare Functions 日志或 D1 绑定状态。`;
+          ? `${ctx} 响应异常(非JSON)。请检查本地后端服务(Wrangler)是否已启动。`
+          : `${ctx} 云端响应异常(HTTP ${response.status} 非JSON)。请检查云端日志或 D1 绑定状态。`;
         throw new ApiError(errorMsg, response.status, { raw: text });
       }
     } else {
@@ -55,14 +63,14 @@ async function request(endpoint, options = {}) {
     
     if (!response.ok) {
       throw new ApiError(
-        data.error || `HTTP ${response.status}`,
+        `${ctx} ${data.error || `HTTP ${response.status}`}`,
         response.status,
         data
       );
     }
     
     if (data.success === false) {
-      throw new ApiError(data.error || 'Unknown error', response.status, data);
+      throw new ApiError(`${ctx} ${data.error || 'Unknown error'}`, response.status, data);
     }
     
     return data.data !== undefined ? data.data : data;
@@ -78,8 +86,15 @@ async function request(endpoint, options = {}) {
     
     // 网络错误
     console.error(`[API] Request failed: ${endpoint}`, error);
+    
+    let ctx = `[${endpoint.split('?')[0]}]`;
+    const symbolMatch = endpoint.match(/[?&]symbol=([^&]+)/);
+    if (symbolMatch) {
+      ctx += ` (股票: ${decodeURIComponent(symbolMatch[1])})`;
+    }
+    
     Toast.error(error.message, '网络请求异常');
-    throw new ApiError(`网络错误: ${error.message}`, 0, null);
+    throw new ApiError(`${ctx} 网络错误: ${error.message}`, 0, null);
   }
 }
 
