@@ -41,7 +41,12 @@ async function request(endpoint, options = {}) {
       try {
         data = JSON.parse(text);
       } catch (e) {
-        throw new ApiError('服务器响应异常 (非JSON格式)。请检查本地后端服务 (Wrangler) 是否已启动。', response.status, { raw: text });
+        console.error(`[API] Non-JSON response from ${url}:`, text);
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const errorMsg = isLocal
+          ? '服务器响应异常 (非JSON格式)。请检查本地后端服务 (Wrangler) 是否已启动。'
+          : `云端服务器响应异常 (HTTP ${response.status} 非JSON)。请检查 Cloudflare Functions 日志或 D1 绑定状态。`;
+        throw new ApiError(errorMsg, response.status, { raw: text });
       }
     } else {
       data = {};
