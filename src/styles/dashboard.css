@@ -473,8 +473,46 @@
 }
 
 @media (max-width: 767px) {
-  .dashboard__kpi-row, .dashboard__market-overview { grid-template-columns: 1fr; }
-  .market-summary-card__stat-value--primary { font-size: 1.4rem; }
+  .dashboard { gap: var(--space-4); }
+  .dashboard__section { gap: var(--space-3); }
+  .dashboard__section-title { font-size: 1rem; margin-bottom: var(--space-1); }
+
+  /* KPI cards — compact */
+  .dashboard__kpi-row, .dashboard__market-overview { grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+  .kpi-card {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    gap: var(--space-3);
+  }
+  .kpi-card__icon { width: 40px; height: 40px; border-radius: 12px; }
+  .kpi-card__icon svg { width: 20px; height: 20px; }
+  .kpi-card__value { font-size: 1.5rem; }
+  .kpi-card__label { font-size: 0.75rem; }
+  .kpi-card__sub { font-size: 0.75rem; }
+  .kpi-card::before { width: 70px; height: 70px; top: -15px; right: -15px; }
+
+  /* Market summary cards — compact */
+  .market-summary-card { padding: var(--space-4) var(--space-4) var(--space-3); border-radius: var(--radius-lg); }
+  .market-summary-card__name { font-size: 0.95rem; }
+  .market-summary-card__stat-value--primary { font-size: 1.3rem; }
+  .market-summary-card__stat-value--secondary { font-size: 0.95rem; }
+  .market-summary-card__stat-label { font-size: 0.65rem; }
+  .market-summary-card__count { font-size: 0.7rem; padding: 2px 8px; }
+  .market-summary-card__sparkline-area { min-height: 44px; }
+
+  /* Charts single column */
+  .dashboard__charts-row { grid-template-columns: 1fr; gap: var(--space-3); }
+}
+
+@media (max-width: 480px) {
+  /* Ultra-compact KPI for small phones */
+  .dashboard__kpi-row { gap: var(--space-2); }
+  .kpi-card { padding: var(--space-3); }
+  .kpi-card__value { font-size: 1.25rem; letter-spacing: -0.3px; }
+  .kpi-card__icon { width: 36px; height: 36px; }
+  .kpi-card__icon svg { width: 18px; height: 18px; }
+
+  .dashboard__market-overview { grid-template-columns: 1fr; gap: var(--space-3); }
 }
 /* ========================================
    Marquee Component
@@ -1097,13 +1135,51 @@
 }
 
 @media (max-width: 767px) {
+  /* Tabs → horizontal scroll instead of wrap */
   .market-page__tabs {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    width: 100%;
   }
+  .market-page__tabs::-webkit-scrollbar { display: none; }
+  .market-page__tab {
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    min-height: 40px;
+  }
+
+  /* KPI compact */
   .market-page__kpi-row {
     grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
   }
+  .market-page__kpi {
+    padding: var(--space-3) var(--space-4);
+  }
+  .market-page__kpi-value { font-size: 1.1rem; }
+  .market-page__kpi-label { font-size: 0.7rem; }
+
+  /* Financial cards single column */
   .market-page__financials-grid {
     grid-template-columns: 1fr;
   }
+
+  /* Section header compact */
+  .market-page__section-header { margin-bottom: var(--space-3); padding-bottom: var(--space-2); }
+  .market-page__section-header h3 { font-size: 0.95rem; }
+
+  /* Hints & empties */
+  .market-page__hint { padding: var(--space-6) var(--space-4); }
+  .market-page__hint h3 { font-size: 1rem; }
+  .market-page__hint p { font-size: 0.8rem; }
+}
+
+@media (max-width: 480px) {
+  .market-page__kpi-row { gap: var(--space-2); }
+  .market-page__kpi { padding: var(--space-2) var(--space-3); }
+  .market-page__kpi-value { font-size: 1rem; }
+  .market-page__tab { padding: 8px 10px; font-size: 0.75rem; }
 }

@@ -18,7 +18,9 @@ export function formatCurrency(amount, currency = 'CNY', showSign = false, useUn
   const symbols = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
   const symbol = symbols[currency] || currency + ' ';
   
-  if (useUnits && abs >= 1e8) {
+  if (useUnits === 'wan') {
+    formatted = `${symbol}${(abs / 1e4).toFixed(2)}万`;
+  } else if (useUnits && abs >= 1e8) {
     formatted = `${symbol}${(abs / 1e8).toFixed(2)}亿`;
   } else if (useUnits && abs >= 1e4) {
     formatted = `${symbol}${(abs / 1e4).toFixed(2)}万`;

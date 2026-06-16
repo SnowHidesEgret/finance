@@ -113,17 +113,17 @@ export async function renderDashboardPage(container) {
           <table class="table" id="positions-table">
             <thead>
               <tr>
-                <th class="table__th">名称</th>
+                <th class="table__th hide-on-mobile">名称</th>
                 <th class="table__th">代码</th>
-                <th class="table__th">市场</th>
-                <th class="table__th table__th--right">数量</th>
-                <th class="table__th table__th--right">现价</th>
-                <th class="table__th table__th--right">成本</th>
+                <th class="table__th hide-on-mobile">市场</th>
+                <th class="table__th table__th--right hide-on-mobile">数量</th>
+                <th class="table__th table__th--right hide-on-mobile">现价</th>
+                <th class="table__th table__th--right hide-on-mobile">成本</th>
                 <th class="table__th table__th--right">市值(¥)</th>
                 <th class="table__th table__th--right dashboard-sortable" data-sort="pnl" style="cursor:pointer; user-select:none;" title="点击按盈亏排序">盈亏(¥) <span class="sort-icon"></span></th>
                 <th class="table__th table__th--right">盈亏%</th>
-                <th class="table__th table__th--right dashboard-sortable" data-sort="ytd" style="cursor:pointer; user-select:none;" title="YTD收益率">YTD <span class="sort-icon"></span></th>
-                <th class="table__th table__th--right dashboard-sortable" data-sort="weight" style="cursor:pointer; user-select:none;" title="点击按占比排序">占比 <span class="sort-icon">↓</span></th>
+                <th class="table__th table__th--right dashboard-sortable hide-on-mobile" data-sort="ytd" style="cursor:pointer; user-select:none;" title="YTD收益率">YTD <span class="sort-icon"></span></th>
+                <th class="table__th table__th--right dashboard-sortable hide-on-mobile" data-sort="weight" style="cursor:pointer; user-select:none;" title="点击按占比排序">占比 <span class="sort-icon">↓</span></th>
               </tr>
             </thead>
             <tbody id="positions-tbody">
@@ -288,6 +288,13 @@ async function loadDashboardData(container) {
 }
 
 /**
+ * 判断当前是否为移动端视图
+ */
+function isMobileView() {
+  return window.matchMedia('(max-width: 767px)').matches;
+}
+
+/**
  * 更新 KPI 卡片
  */
 function updateKPICards(data) {
@@ -299,11 +306,14 @@ function updateKPICards(data) {
   const dayPnl = data.dayPnl || data.totalDayPnL || 0;
   const count = data.positionCount || 0;
   
-  animateValue('val-total-value', totalValue, v => formatCurrency(v, 'CNY', false, false));
+  // 移动端强制使用万单位，PC端显示完整数字
+  const mobile = isMobileView() ? 'wan' : false;
+  
+  animateValue('val-total-value', totalValue, v => formatCurrency(v, 'CNY', false, mobile));
   
   const pnlEl = document.getElementById('val-total-pnl');
   if (pnlEl) {
-    pnlEl.textContent = formatCurrency(totalPnl, 'CNY', true, false);
+    pnlEl.textContent = formatCurrency(totalPnl, 'CNY', true, mobile);
     pnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(totalPnl)}`;
   }
   
@@ -315,7 +325,7 @@ function updateKPICards(data) {
   
   const dayPnlEl = document.getElementById('val-day-pnl');
   if (dayPnlEl) {
-    dayPnlEl.textContent = formatCurrency(dayPnl, 'CNY', true, false);
+    dayPnlEl.textContent = formatCurrency(dayPnl, 'CNY', true, mobile);
     dayPnlEl.className = `kpi-card__value kpi-card__value--${getPnLClass(dayPnl)}`;
   }
   
@@ -539,20 +549,22 @@ function updatePositionTable(positions, rates) {
     
     return `
       <tr class="table__row table__row--hoverable">
-        <td class="table__td">
+        <td class="table__td hide-on-mobile">
           <div class="table__stock-name">
-            <span class="table__stock-primary pos-name-click" style="font-weight:600; cursor:pointer; color:var(--color-primary); border-bottom:1px dashed var(--color-primary);" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细 (${pos.name})">${pos.name}</span>
+            <span class="table__stock-primary" style="font-weight:600;">${pos.name}</span>
           </div>
         </td>
-        <td class="table__td table__td--mono">${pos.symbol}</td>
-        <td class="table__td" title="${market.label || pos.market}">
+        <td class="table__td table__td--mono">
+          <span class="pos-name-click" style="cursor:pointer; color:var(--color-primary); border-bottom:1px dashed var(--color-primary);" data-id="${pos.id}" data-symbol="${pos.symbol}" data-name="${pos.name}" data-currency="${currency}" title="点击查看逐笔未平仓明细 (${pos.name})">${pos.symbol}</span>
+        </td>
+        <td class="table__td hide-on-mobile" title="${market.label || pos.market}">
           ${market.flag || ''}
         </td>
-        <td class="table__td table__td--right">${formatQuantity(pos.quantity)}</td>
-        <td class="table__td table__td--right table__td--mono" title="${hasLive ? '实时价格' : '使用开仓价'}">
+        <td class="table__td table__td--right hide-on-mobile">${formatQuantity(pos.quantity)}</td>
+        <td class="table__td table__td--right table__td--mono hide-on-mobile" title="${hasLive ? '实时价格' : '使用开仓价'}">
           ${fmtNative(currentPrice, currency)}${hasLive ? '' : ' <small style="color:var(--color-text-muted)">*</small>'}
         </td>
-        <td class="table__td table__td--right table__td--mono">${fmtNative(pos.open_price, currency)}</td>
+        <td class="table__td table__td--right table__td--mono hide-on-mobile">${fmtNative(pos.open_price, currency)}</td>
         <td class="table__td table__td--right table__td--mono">${formatCurrency(marketValueCNY)}</td>
         <td class="table__td table__td--right table__td--${getPnLClass(pnl)}">
           ${formatCurrency(pnl, 'CNY', true)}
@@ -560,10 +572,10 @@ function updatePositionTable(positions, rates) {
         <td class="table__td table__td--right table__td--${getPnLClass(pnlPct)}">
           ${formatPercent(pnlPct)}
         </td>
-        <td class="table__td table__td--right table__td--${getPnLClass(pos.ytdPercent || 0)}">
+        <td class="table__td table__td--right table__td--${getPnLClass(pos.ytdPercent || 0)} hide-on-mobile">
           ${formatPercent(pos.ytdPercent || 0)}
         </td>
-        <td class="table__td table__td--right">${weight.toFixed(1)}%</td>
+        <td class="table__td table__td--right hide-on-mobile">${weight.toFixed(1)}%</td>
       </tr>
     `;
   }).join('');
@@ -613,16 +625,56 @@ async function updateCharts(summary, positions, rates) {
     // 盈亏排名
     const barContainer = document.getElementById('chart-pnl-bar');
     if (barContainer) {
-      const { renderPnLBar } = await import('../charts/pnlBar.js');
-      const barData = (summary.positions || positions || [])
-        .filter(p => p.status === 'OPEN' || !p.status)
-        .map(p => ({
-          name: p.name,
-          pnl: p.pnlCNY || p.pnl_cny || 0,
-          pnlPercent: p.pnlPercent || p.pnl_percent || 0
-        }))
-        .sort((a, b) => b.pnl - a.pnl);
-      if (barData.length > 0) renderPnLBar(barContainer, barData);
+      const rawData = (summary.positions || positions || [])
+        .filter(p => p.status === 'OPEN' || !p.status);
+        
+      if (isMobileView()) {
+        const sortedData = rawData
+          .map(p => ({
+            symbol: p.symbol,
+            pnl: p.pnlCNY || p.pnl_cny || 0,
+            pnlPercent: p.pnlPercent || p.pnl_percent || 0
+          }))
+          .sort((a, b) => b.pnl - a.pnl);
+          
+        const top3 = sortedData.filter(d => d.pnl > 0).slice(0, 3);
+        const bottom3 = sortedData.filter(d => d.pnl < 0).reverse().slice(0, 3);
+        
+        const renderItem = (d) => `
+          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05); align-items:center;">
+            <span style="font-family:'JetBrains Mono',monospace; font-weight:600; font-size:0.85rem;">${d.symbol}</span>
+            <div style="text-align:right;">
+              <div class="${getPnLClass(d.pnl)}" style="font-family:'JetBrains Mono',monospace; font-size:0.9rem; font-weight:600;">${formatCurrency(d.pnl, 'CNY', true, true)}</div>
+              <div class="${getPnLClass(d.pnlPercent)}" style="font-size:0.7rem; font-family:'JetBrains Mono',monospace;">${formatPercent(d.pnlPercent)}</div>
+            </div>
+          </div>
+        `;
+        
+        barContainer.style.height = 'auto'; // Disable fixed height
+        barContainer.innerHTML = `
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div>
+              <div style="font-size:0.75rem; color:var(--color-text-muted); margin-bottom:8px; border-bottom:2px solid var(--color-profit); display:inline-block; padding-bottom:2px;">Top 盈利</div>
+              ${top3.length ? top3.map(renderItem).join('') : '<div style="font-size:0.8rem; color:var(--color-text-muted); padding:8px 0;">无盈利持仓</div>'}
+            </div>
+            <div>
+              <div style="font-size:0.75rem; color:var(--color-text-muted); margin-bottom:8px; border-bottom:2px solid var(--color-loss); display:inline-block; padding-bottom:2px;">Top 亏损</div>
+              ${bottom3.length ? bottom3.map(renderItem).join('') : '<div style="font-size:0.8rem; color:var(--color-text-muted); padding:8px 0;">无亏损持仓</div>'}
+            </div>
+          </div>
+        `;
+      } else {
+        const { renderPnLBar } = await import('../charts/pnlBar.js');
+        const barData = rawData
+          .map(p => ({
+            name: p.name,
+            pnl: p.pnlCNY || p.pnl_cny || 0,
+            pnlPercent: p.pnlPercent || p.pnl_percent || 0
+          }))
+          .sort((a, b) => b.pnl - a.pnl);
+        barContainer.style.height = '320px';
+        if (barData.length > 0) renderPnLBar(barContainer, barData);
+      }
     }
     
     // 矩形树图

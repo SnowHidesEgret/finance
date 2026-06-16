@@ -104,6 +104,14 @@
 [data-theme='light'] .sidebar__item--active {
   background: linear-gradient(90deg, rgba(99,102,241,0.1), rgba(99,102,241,0.03));
 }
+@media (max-width: 767px) {
+  [data-theme='light'] .app-layout__sidebar {
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(0,0,0,0.06);
+    box-shadow: 0 -1px 12px rgba(0,0,0,0.05);
+  }
+}
 
 [data-font-size='small'] {
   --app-font-size: 14px;
@@ -261,17 +269,57 @@ body.login-layout .app-layout__content {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 767px) {
-  .app-layout { flex-direction: column; }
-  .app-layout__sidebar { 
-    width: 100%; 
-    height: auto; 
-    flex-direction: row; 
-    border-right: none; 
-    border-top: var(--glass-border); 
+  .app-layout { flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* Sidebar → fixed bottom tab bar */
+  .app-layout__sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    z-index: 200;
     order: 3;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .app-layout__main { order: 1; }
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+
+  .app-layout__main {
+    order: 1;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  /* Header height shrinks */
+  .app-layout__header { height: 52px; }
+
+  /* Content padding reduced + clearance for fixed bottom nav */
+  .app-layout__content {
+    padding: var(--space-3);
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Hide exchange-rate footer on mobile — saves space */
+  .app-layout__footer { display: none; }
+
+  /* Grids → single column */
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; gap: var(--space-3); }
+
+  /* Page header tighter */
+  .page-header { margin-bottom: var(--space-3); }
+  .page-title { font-size: 1.2rem; }
+}
+
+/* Ultra-small screens (iPhone SE etc.) */
+@media (max-width: 480px) {
+  .app-layout__content { padding: var(--space-2); padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+  .page-title { font-size: 1.1rem; }
 }
 
 .app-loading {
