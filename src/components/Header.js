@@ -127,6 +127,9 @@ export function renderHeader(container) {
 
   // Load marquee data
   loadIndexMarqueeData();
+
+  // 监听全局刷新事件以更新跑马灯数值
+  window.addEventListener('stockvault:refresh', loadIndexMarqueeData);
   
   const marqueeWrapper = container.querySelector('#global-marquee-wrapper');
   const marqueeContent = container.querySelector('#index-marquee');
