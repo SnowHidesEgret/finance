@@ -159,14 +159,10 @@ function renderOverviewSection(positions, marketSummary) {
           <div class="market-page__kpi-label">年化收益率</div>
           <div class="market-page__kpi-value ${getPnLClass(annualized)}">${formatPercent(annualized)}</div>
         </div>
-        <div class="market-page__kpi">
-          <div class="market-page__kpi-label">持仓数量</div>
-          <div class="market-page__kpi-value">${count} 笔</div>
-        </div>
         <div class="market-page__kpi" style="border-left:1px dashed var(--color-border); padding-left:16px;">
           <div class="market-page__kpi-label" style="display:inline-flex; align-items:center; gap:4px;">
-            整体 Beta
-            <i data-lucide="help-circle" style="width:12px; height:12px; color:var(--color-text-muted);" title="基于各持仓股票的市值权重与个股 Beta 加权计算得出"></i>
+            整体 Bate
+            <i data-lucide="help-circle" style="width:12px; height:12px; color:var(--color-text-muted);" title="基于各持仓股票的市值权重与个股 Bate 加权计算得出"></i>
           </div>
           <div class="market-page__kpi-value" id="portfolio-beta-value" style="color:var(--color-accent);">加载中...</div>
         </div>
@@ -577,6 +573,6 @@ function updatePortfolioBeta(container, financialsMap, positions) {
     betaKpiVal.title = `基准市场波动为 1.0，当前投资组合波动度约为市场的 ${Math.round(portfolioBeta * 100)}% (${label})`;
   } else {
     betaKpiVal.textContent = '--';
-    betaKpiVal.title = '暂无足够个股 Beta 数据计算整体 Beta';
+    betaKpiVal.title = '暂无足够个股 Bate 数据计算整体 Bate';
   }
 }
