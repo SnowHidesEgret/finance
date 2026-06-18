@@ -67,18 +67,29 @@ async function updateRates(force = false) {
         rate: dxyQuote.price,
         display: `美元指数 ${dxyQuote.price.toFixed(2)}`
       });
+    } else {
+      rates.push({
+        pair: '美元指数',
+        rate: null,
+        display: '美元指数 ----'
+      });
     }
 
     const display = document.getElementById('rate-display');
     const timeEl = document.getElementById('rate-time');
     
     if (display) {
-      display.innerHTML = rates.map(r => `
-        <span class="exchange-rate-bar__item">
-          <span class="exchange-rate-bar__pair">${r.pair}</span>
-          <span class="exchange-rate-bar__value">${r.rate.toFixed(r.pair === '美元指数' ? 2 : 4)}</span>
-        </span>
-      `).join('<span class="exchange-rate-bar__divider">│</span>');
+      display.innerHTML = rates.map(r => {
+        const val = (r.rate === null || r.rate === undefined)
+          ? '----'
+          : r.rate.toFixed(r.pair === '美元指数' ? 2 : 4);
+        return `
+          <span class="exchange-rate-bar__item">
+            <span class="exchange-rate-bar__pair">${r.pair}</span>
+            <span class="exchange-rate-bar__value">${val}</span>
+          </span>
+        `;
+      }).join('<span class="exchange-rate-bar__divider">│</span>');
     }
     
     if (timeEl) {
