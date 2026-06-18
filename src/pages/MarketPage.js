@@ -163,6 +163,13 @@ function renderOverviewSection(positions, marketSummary) {
           <div class="market-page__kpi-label">持仓数量</div>
           <div class="market-page__kpi-value">${count} 笔</div>
         </div>
+        <div class="market-page__kpi" style="border-left:1px dashed var(--color-border); padding-left:16px;">
+          <div class="market-page__kpi-label" style="display:inline-flex; align-items:center; gap:4px;">
+            整体 Beta
+            <i data-lucide="help-circle" style="width:12px; height:12px; color:var(--color-text-muted);" title="基于各持仓股票的市值权重与个股 Beta 加权计算得出"></i>
+          </div>
+          <div class="market-page__kpi-value" id="portfolio-beta-value" style="color:var(--color-accent);">加载中...</div>
+        </div>
       </div>
 
       ${count > 0 ? `
@@ -278,6 +285,9 @@ async function loadFinnhubModules(container, symbols, positions) {
     renderEarningsModule(container, data.earnings, positions);
 
     renderFinancialsModule(container, data.financials, positions);
+
+    // 计算并更新整体 Beta 值
+    updatePortfolioBeta(container, data.financials, positions);
 
   } catch (error) {
     console.error('[MarketPage] Finnhub load failed:', error);
@@ -537,4 +547,36 @@ function escapeHtml(str) {
 function truncate(str, maxLen) {
   if (!str || str.length <= maxLen) return str;
   return str.substring(0, maxLen) + '...';
+}
+
+function updatePortfolioBeta(container, financialsMap, positions) {
+  const betaKpiVal = container.querySelector('#portfolio-beta-value');
+  if (!betaKpiVal) return;
+
+  let weightedBetaSum = 0;
+  let totalWeightValue = 0;
+
+  positions.forEach(pos => {
+    const data = financialsMap.get(pos.symbol);
+    const beta = data?.metric?.beta;
+    const valueCNY = pos.marketValueCNY || pos.valueCNY || 0;
+
+    if (beta != null && !isNaN(beta) && valueCNY > 0) {
+      weightedBetaSum += valueCNY * beta;
+      totalWeightValue += valueCNY;
+    }
+  });
+
+  if (totalWeightValue > 0) {
+    const portfolioBeta = weightedBetaSum / totalWeightValue;
+    betaKpiVal.textContent = portfolioBeta.toFixed(2);
+    
+    let label = '中等风险';
+    if (portfolioBeta > 1.2) label = '高弹性/高风险';
+    else if (portfolioBeta < 0.8) label = '防御性/低风险';
+    betaKpiVal.title = `基准市场波动为 1.0，当前投资组合波动度约为市场的 ${Math.round(portfolioBeta * 100)}% (${label})`;
+  } else {
+    betaKpiVal.textContent = '--';
+    betaKpiVal.title = '暂无足够个股 Beta 数据计算整体 Beta';
+  }
 }
