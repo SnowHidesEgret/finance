@@ -89,28 +89,25 @@ async function loadMarketData(container) {
 
     const marketPositions = _cachedPositions.filter(p => p.market === _currentMarket);
     const marketSummary = summaryData?.markets?.[_currentMarket] || summaryData?.marketSummaries?.[_currentMarket] || {};
-    const isUS = _currentMarket === 'US';
+    const marketLabel = MARKETS[_currentMarket]?.label || _currentMarket;
 
     // 渲染持仓概览 (所有市场都有)
     let html = renderOverviewSection(marketPositions, marketSummary);
 
-    if (isUS && marketPositions.length > 0) {
-      // 美股：渲染 Finnhub 模块骨架
+    if (marketPositions.length > 0) {
+      // 渲染数据卡片骨架
       html += renderFinnhubSkeleton();
       content.innerHTML = html;
 
-      // 异步加载 Finnhub 数据
-      const usSymbols = marketPositions
-        .map(p => translateToUSSymbol(p.symbol))
+      // 异步加载各股票分析数据
+      const symbolsToFetch = marketPositions
+        .map(p => p.symbol)
         .filter(Boolean);
 
-      loadFinnhubModules(container, usSymbols, marketPositions);
-    } else if (isUS && marketPositions.length === 0) {
-      html += renderEmptyPositionsHint('美股');
-      content.innerHTML = html;
+      loadFinnhubModules(container, symbolsToFetch, marketPositions);
     } else {
-      // 非美股市场
-      html += renderNonUSHint(MARKETS[_currentMarket]?.label || _currentMarket);
+      // 空持仓提示
+      html += renderEmptyPositionsHint(marketLabel);
       content.innerHTML = html;
     }
 
@@ -128,18 +125,7 @@ async function loadMarketData(container) {
   }
 }
 
-/**
- * 将内部股票代码转换为 Yahoo/Finnhub 标准美股代码
- */
-function translateToUSSymbol(symbol) {
-  let s = (symbol || '').toUpperCase();
-  // 去掉交易所后缀（美股通常无后缀）
-  if (s.endsWith('.HKG') || s.endsWith('.SHH') || s.endsWith('.SHZ') || s.endsWith('.SWX')) return null;
-  // Finnhub 特殊格式的也不处理
-  if (s.startsWith('OANDA:') || s.startsWith('BINANCE:') || s.startsWith('CRYPTO:')) return null;
-  if (s.startsWith('^')) return null;
-  return s;
-}
+// translateToUSSymbol is no longer needed as all symbols are translated backend-side
 
 // ═══════════════════════════════════════════════════════
 //  模块 1: 持仓概览
@@ -354,7 +340,7 @@ function renderEarningsModule(container, earningsList, positions) {
   earningsList.forEach(e => {
     const date = e.date || 'Unknown';
     if (!grouped[date]) grouped[date] = [];
-    const pos = positions.find(p => translateToUSSymbol(p.symbol) === (e._symbol || e.symbol));
+    const pos = positions.find(p => p.symbol === (e._symbol || e.symbol));
     grouped[date].push({ ...e, posName: pos?.name || e.symbol || e._symbol });
   });
 
@@ -371,17 +357,22 @@ function renderEarningsModule(container, earningsList, positions) {
         return `
           <div class="market-page__timeline-group ${isPast ? 'market-page__timeline-group--past' : ''}">
             <div class="market-page__timeline-date ${isToday ? 'market-page__timeline-date--today' : ''}">${dateLabel}</div>
-            ${items.map(item => `
-              <div class="market-page__timeline-item">
-                <div class="market-page__timeline-dot"></div>
-                <div class="market-page__timeline-content">
-                  <span class="market-page__timeline-name">${item.posName}</span>
-                  <span class="market-page__timeline-symbol">${item._symbol || item.symbol || ''}</span>
-                  ${item.epsEstimate ? `<span class="market-page__timeline-eps">EPS 预估: $${item.epsEstimate}</span>` : ''}
-                  ${item.hour ? `<span class="market-page__timeline-hour">${item.hour === 'bmo' ? '盘前' : item.hour === 'amc' ? '盘后' : item.hour}</span>` : ''}
-                </div>
-              </div>
-            `).join('')}
+            ${items.map(item => {
+              const pos = positions.find(p => p.symbol === (item._symbol || item.symbol));
+              const currency = pos?.currency || MARKETS[pos?.market]?.currency || 'USD';
+              const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+              const currencySymbol = CURRENCY_SYMBOL[currency] || '$';
+              return `
+                <div class="market-page__timeline-item">
+                  <div class="market-page__timeline-dot"></div>
+                  <div class="market-page__timeline-content">
+                    <span class="market-page__timeline-name">${item.posName}</span>
+                    <span class="market-page__timeline-symbol">${item._symbol || item.symbol || ''}</span>
+                    ${item.epsEstimate ? `<span class="market-page__timeline-eps">EPS 预估: ${currencySymbol}${item.epsEstimate}</span>` : ''}
+                    ${item.hour ? `<span class="market-page__timeline-hour">${item.hour === 'bmo' ? '盘前' : item.hour === 'amc' ? '盘后' : item.hour}</span>` : ''}
+                  </div>
+                </div>`;
+            }).join('')}
           </div>`;
       }).join('')}
     </div>
@@ -411,8 +402,11 @@ function renderFinancialsModule(container, financialsMap, positions) {
   let html = '<div class="market-page__financials-grid">';
 
   for (const [symbol, data] of financialsMap) {
-    const pos = positions.find(p => translateToUSSymbol(p.symbol) === symbol);
+    const pos = positions.find(p => p.symbol === symbol);
     const name = pos?.name || symbol;
+    const currency = pos?.currency || MARKETS[pos?.market]?.currency || 'USD';
+    const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
+    const currencySymbol = CURRENCY_SYMBOL[currency] || '$';
     const m = data?.metric || {};
     const currentPrice = pos?.currentPrice || pos?.current_price || 0;
     const wk52High = m['52WeekHigh'] || 0;
@@ -429,7 +423,7 @@ function renderFinancialsModule(container, financialsMap, positions) {
         <div class="market-page__fin-metrics">
           ${renderMetricRow('P/E (TTM)', m.peNormalizedAnnual || m.peTTM, null)}
           ${renderMetricRow('P/B', m.pbAnnual || m.pbQuarterly, null)}
-          ${renderMetricRow('EPS (TTM)', m.epsNormalizedAnnual || m.epsTTM, '$')}
+          ${renderMetricRow('EPS (TTM)', m.epsNormalizedAnnual || m.epsTTM, currencySymbol)}
           ${renderMetricRow('市值', m.marketCapitalization, null, true)}
           ${renderMetricRow('Beta', m.beta, null)}
           ${renderMetricRow('股息率', m.dividendYieldIndicatedAnnual, '%')}
@@ -439,13 +433,13 @@ function renderFinancialsModule(container, financialsMap, positions) {
         </div>
         <div class="market-page__52w">
           <div class="market-page__52w-label">
-            <span>$${formatNumber(wk52Low)}</span>
+            <span>${currencySymbol}${formatNumber(wk52Low)}</span>
             <span style="font-size:0.75rem; color:var(--color-text-muted);">52周区间</span>
-            <span>$${formatNumber(wk52High)}</span>
+            <span>${currencySymbol}${formatNumber(wk52High)}</span>
           </div>
           <div class="market-page__52w-bar">
             <div class="market-page__52w-fill" style="width: ${Math.min(Math.max(wk52Pct, 2), 98)}%;"></div>
-            <div class="market-page__52w-marker" style="left: ${Math.min(Math.max(wk52Pct, 2), 98)}%;" title="当前价 $${formatNumber(currentPrice)}"></div>
+            <div class="market-page__52w-marker" style="left: ${Math.min(Math.max(wk52Pct, 2), 98)}%;" title="当前价 ${currencySymbol}${formatNumber(currentPrice)}"></div>
           </div>
         </div>
       </div>
@@ -461,8 +455,8 @@ function renderMetricRow(label, value, unit, isCap = false) {
   if (value != null && !isNaN(value)) {
     if (isCap) {
       display = value >= 1000 ? `${(value / 1000).toFixed(1)}T` : `${value.toFixed(1)}B`;
-    } else if (unit === '$') {
-      display = `$${Number(value).toFixed(2)}`;
+    } else if (unit && unit !== '%') {
+      display = `${unit}${Number(value).toFixed(2)}`;
     } else if (unit === '%') {
       display = `${Number(value).toFixed(2)}%`;
     } else {
