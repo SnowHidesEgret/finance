@@ -167,6 +167,11 @@ export async function renderSettingsPage(container) {
             curl -H "Authorization: Bearer sk-xxxxx" \\<br>
             &nbsp;&nbsp;${window.location.origin}/api/openclaw/portfolio
           </code>
+          <div style="border-top: 1px dashed var(--color-border); padding-top: 8px; margin-top: 8px;">
+            <a href="/SKILL.md" download="SKILL.md" style="font-size:0.75rem; color:var(--color-accent); text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight: 500; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+              💾 下载 OpenClaw SKILL.md 技能配置文件
+            </a>
+          </div>
         </div>
       </div>
 
