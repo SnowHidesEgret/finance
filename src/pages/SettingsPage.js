@@ -1,7 +1,7 @@
 /**
  * StockVault — 设置页
  */
-import { get, put } from '../services/api.js';
+import { get, put, post, del } from '../services/api.js';
 import { getColorScheme, setColorScheme } from '../utils/colorScheme.js';
 import { getAppTheme, setAppTheme } from '../utils/appTheme.js';
 import { getFontSize, setFontSize } from '../utils/fontSize.js';
@@ -13,10 +13,16 @@ export async function renderSettingsPage(container) {
   const currentFontSize = getFontSize();
   
   let apiSettings = { finnhub_api_key: '', alpha_vantage_api_key: '' };
+  let apiKeyStatus = { configured: false, createdAt: null };
   try {
     apiSettings = await get('/api/settings');
   } catch (err) {
     console.error('[Settings] Failed to fetch API settings:', err);
+  }
+  try {
+    apiKeyStatus = await get('/api/openclaw/apikey');
+  } catch (err) {
+    console.error('[Settings] Failed to fetch API Key status:', err);
   }
   
   container.innerHTML = `
@@ -118,6 +124,50 @@ export async function renderSettingsPage(container) {
           <div id="api-msg" style="font-size:0.875rem; margin-bottom:16px; display:none;"></div>
           <button type="submit" class="btn btn--primary" id="api-btn">保存 API 设置</button>
         </form>
+      </div>
+
+      <div class="card" style="max-width: 600px; margin-top: 24px;">
+        <h3 style="margin-bottom:24px; font-size:1.1rem; border-bottom:1px solid var(--color-border); padding-bottom:12px;">🔑 OpenClaw API 密钥</h3>
+        <p style="font-size:0.875rem; color:var(--color-text-secondary); margin-bottom:16px;">
+          为外部 AI 智能体（如 OpenClaw）生成专用 API Key，用于安全访问您的投资数据。密钥仅在生成时显示一次，请妥善保管。
+        </p>
+
+        <div id="apikey-status" style="margin-bottom:16px; padding:12px 16px; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid var(--color-border);">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="width:8px; height:8px; border-radius:50%; background:${apiKeyStatus.configured ? '#10b981' : '#6b7280'}; display:inline-block;"></span>
+              <span style="font-size:0.875rem; color:var(--color-text-primary);">
+                ${apiKeyStatus.configured ? '已配置' : '未配置'}
+              </span>
+            </div>
+            ${apiKeyStatus.configured && apiKeyStatus.createdAt ? `<span style="font-size:0.75rem; color:var(--color-text-muted);">创建于 ${new Date(apiKeyStatus.createdAt).toLocaleDateString('zh-CN')}</span>` : ''}
+          </div>
+        </div>
+
+        <div id="apikey-result" style="display:none; margin-bottom:16px; padding:12px 16px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:8px;">
+          <p style="font-size:0.75rem; color:#10b981; margin-bottom:8px; font-weight:600;">⚠️ 请立即复制并保存此密钥，它只会显示一次！</p>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <code id="apikey-value" style="flex:1; font-size:0.8rem; padding:8px 12px; background:rgba(0,0,0,0.3); border-radius:4px; word-break:break-all; color:var(--color-text-primary); font-family:monospace;"></code>
+            <button type="button" id="apikey-copy-btn" class="btn" style="padding:6px 12px; font-size:0.75rem; white-space:nowrap;">复制</button>
+          </div>
+        </div>
+
+        <div id="apikey-msg" style="font-size:0.875rem; margin-bottom:16px; display:none;"></div>
+
+        <div style="display:flex; gap:12px;">
+          <button type="button" id="apikey-generate-btn" class="btn btn--primary" style="font-size:0.875rem;">
+            ${apiKeyStatus.configured ? '🔄 重新生成' : '✨ 生成密钥'}
+          </button>
+          ${apiKeyStatus.configured ? '<button type="button" id="apikey-revoke-btn" class="btn" style="font-size:0.875rem; background:transparent; border:1px solid var(--color-loss); color:var(--color-loss);">🗑️ 撤销密钥</button>' : ''}
+        </div>
+
+        <div style="margin-top:16px; padding:12px 16px; background:rgba(255,255,255,0.02); border-radius:8px; border:1px dashed var(--color-border);">
+          <p style="font-size:0.75rem; color:var(--color-text-muted); margin-bottom:6px; font-weight:600;">📡 API 使用方式</p>
+          <code style="font-size:0.7rem; color:var(--color-text-secondary); display:block; font-family:monospace; line-height:1.8;">
+            curl -H "Authorization: Bearer sk-xxxxx" \\<br>
+            &nbsp;&nbsp;${window.location.origin}/api/openclaw/portfolio
+          </code>
+        </div>
       </div>
 
       <div class="card" style="max-width: 600px; margin-top: 24px;">
@@ -242,6 +292,88 @@ export async function renderSettingsPage(container) {
       } finally {
         btn.disabled = false;
         btn.textContent = '保存 API 设置';
+      }
+    });
+  }
+
+  // ── OpenClaw API Key management ─────────────────────────────────────
+  const generateBtn = document.getElementById('apikey-generate-btn');
+  if (generateBtn) {
+    generateBtn.addEventListener('click', async () => {
+      const msgEl = document.getElementById('apikey-msg');
+      const resultEl = document.getElementById('apikey-result');
+      const valueEl = document.getElementById('apikey-value');
+
+      if (apiKeyStatus.configured) {
+        if (!confirm('重新生成将使当前密钥失效，确定继续吗？')) return;
+      }
+
+      try {
+        generateBtn.disabled = true;
+        generateBtn.textContent = '生成中...';
+        msgEl.style.display = 'none';
+
+        const result = await post('/api/openclaw/apikey', {});
+        valueEl.textContent = result.apiKey;
+        resultEl.style.display = 'block';
+
+        // Update status indicator
+        const statusDot = document.querySelector('#apikey-status span:first-child');
+        const statusText = document.querySelector('#apikey-status span:nth-child(2)');
+        if (statusDot) statusDot.style.background = '#10b981';
+        if (statusText) statusText.textContent = '已配置';
+
+        generateBtn.textContent = '🔄 重新生成';
+        apiKeyStatus.configured = true;
+      } catch (err) {
+        msgEl.style.color = 'var(--color-loss)';
+        msgEl.textContent = err.message || '生成失败';
+        msgEl.style.display = 'block';
+      } finally {
+        generateBtn.disabled = false;
+        if (!generateBtn.textContent.startsWith('🔄')) {
+          generateBtn.textContent = apiKeyStatus.configured ? '🔄 重新生成' : '✨ 生成密钥';
+        }
+      }
+    });
+  }
+
+  const copyBtn = document.getElementById('apikey-copy-btn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      const valueEl = document.getElementById('apikey-value');
+      if (valueEl && valueEl.textContent) {
+        navigator.clipboard.writeText(valueEl.textContent).then(() => {
+          copyBtn.textContent = '已复制 ✓';
+          setTimeout(() => { copyBtn.textContent = '复制'; }, 2000);
+        });
+      }
+    });
+  }
+
+  const revokeBtn = document.getElementById('apikey-revoke-btn');
+  if (revokeBtn) {
+    revokeBtn.addEventListener('click', async () => {
+      if (!confirm('撤销后所有使用此密钥的智能体将无法访问，确定吗？')) return;
+      const msgEl = document.getElementById('apikey-msg');
+
+      try {
+        revokeBtn.disabled = true;
+        revokeBtn.textContent = '撤销中...';
+        await del('/api/openclaw/apikey');
+
+        msgEl.style.color = '#10b981';
+        msgEl.textContent = 'API Key 已成功撤销';
+        msgEl.style.display = 'block';
+
+        // Re-render after brief delay
+        setTimeout(() => renderSettingsPage(container), 1000);
+      } catch (err) {
+        msgEl.style.color = 'var(--color-loss)';
+        msgEl.textContent = err.message || '撤销失败';
+        msgEl.style.display = 'block';
+        revokeBtn.disabled = false;
+        revokeBtn.textContent = '🗑️ 撤销密钥';
       }
     });
   }
