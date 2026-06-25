@@ -47,7 +47,6 @@ export async function onRequestGet(context) {
     const ratesSQL = `
       SELECT base_currency, target_currency, rate
       FROM exchange_rates
-      WHERE target_currency = 'CNY'
     `;
 
     // ── 3. Latest per-market snapshots (for YTD) ─────────────────
@@ -69,8 +68,33 @@ export async function onRequestGet(context) {
 
     // ── Build rate lookup (currency → CNY) ───────────────────────
     const rateToCNY = { ...FALLBACK_RATES };
+    let dbHasRates = false;
     for (const row of ratesResult.results || []) {
-      rateToCNY[row.base_currency] = row.rate;
+      const rate = Number(row.rate);
+      if (!rate) continue;
+      if (row.target_currency === 'CNY') {
+        rateToCNY[row.base_currency] = rate < 1 && row.base_currency !== 'HKD' ? 1 / rate : rate;
+        dbHasRates = true;
+      } else if (row.base_currency === 'CNY') {
+        rateToCNY[row.target_currency] = 1 / rate;
+        dbHasRates = true;
+      }
+    }
+
+    if (!dbHasRates) {
+      try {
+        const rateRes = await fetch('https://api.frankfurter.dev/v1/latest?base=CNY&symbols=USD,HKD,CHF');
+        if (rateRes.ok) {
+          const rateData = await rateRes.json();
+          if (rateData.rates) {
+            if (rateData.rates.USD) rateToCNY.USD = 1 / rateData.rates.USD;
+            if (rateData.rates.HKD) rateToCNY.HKD = 1 / rateData.rates.HKD;
+            if (rateData.rates.CHF) rateToCNY.CHF = 1 / rateData.rates.CHF;
+          }
+        }
+      } catch (e) {
+        console.warn('OpenClaw live rate fetch failed, using fallback:', e.message);
+      }
     }
 
     // ── Build YTD lookup ─────────────────────────────────────────

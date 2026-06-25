@@ -41,11 +41,40 @@ const FALLBACK_RATES = {
  */
 async function loadRates(db) {
   const rates = { ...FALLBACK_RATES };
-  const { results } = await db.prepare(
-    "SELECT base_currency, rate FROM exchange_rates WHERE target_currency = 'CNY'"
-  ).all();
-  for (const row of results ?? []) {
-    rates[row.base_currency] = Number(row.rate);
+  let dbHasRates = false;
+  try {
+    const { results } = await db.prepare(
+      "SELECT base_currency, target_currency, rate FROM exchange_rates"
+    ).all();
+    for (const row of results ?? []) {
+      const rate = Number(row.rate);
+      if (!rate) continue;
+      if (row.target_currency === 'CNY') {
+        rates[row.base_currency] = rate < 1 && row.base_currency !== 'HKD' ? 1 / rate : rate;
+        dbHasRates = true;
+      } else if (row.base_currency === 'CNY') {
+        rates[row.target_currency] = 1 / rate;
+        dbHasRates = true;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load rates from DB:', err.message);
+  }
+
+  if (!dbHasRates) {
+    try {
+      const rateRes = await fetch('https://api.frankfurter.dev/v1/latest?base=CNY&symbols=USD,HKD,CHF');
+      if (rateRes.ok) {
+        const rateData = await rateRes.json();
+        if (rateData.rates) {
+          if (rateData.rates.USD) rates.USD = 1 / rateData.rates.USD;
+          if (rateData.rates.HKD) rates.HKD = 1 / rateData.rates.HKD;
+          if (rateData.rates.CHF) rates.CHF = 1 / rateData.rates.CHF;
+        }
+      }
+    } catch (e) {
+      console.warn('OpenClaw live rate fetch failed, using fallback:', e.message);
+    }
   }
   return rates;
 }
@@ -130,12 +159,12 @@ export async function onRequestGet({ env, request }) {
     const currentPrice = quote ? Number(quote.price) : null;
 
     // Cost uses the rate recorded at purchase time
-    const costCNY = pos.quantity * pos.open_price * (pos.open_rate_to_cny || rateToCNY);
+    const costRate = pos.open_rate_to_cny || rateToCNY;
+    const costCNY = (pos.quantity * pos.open_price + (pos.commission || 0)) * costRate;
 
-    // Value uses current exchange rate; falls back to cost if no quote
-    const valueCNY = currentPrice !== null
-      ? pos.quantity * currentPrice * rateToCNY
-      : costCNY;
+    // Value uses current exchange rate; falls back to open_price if no quote
+    const activePrice = currentPrice !== null ? currentPrice : pos.open_price;
+    const valueCNY = pos.quantity * activePrice * rateToCNY;
 
     const pnlCNY = valueCNY - costCNY;
     const pnlPercent = costCNY > 0

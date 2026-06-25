@@ -46,13 +46,42 @@ const FALLBACK_RATES = {
  */
 async function loadRates(db) {
   const rates = { ...FALLBACK_RATES };
+  let dbHasRates = false;
 
-  const { results } = await db.prepare(
-    "SELECT base_currency, rate FROM exchange_rates WHERE target_currency = 'CNY'"
-  ).all();
+  try {
+    const { results } = await db.prepare(
+      "SELECT base_currency, target_currency, rate FROM exchange_rates"
+    ).all();
 
-  for (const row of results ?? []) {
-    rates[row.base_currency] = Number(row.rate);
+    for (const row of results ?? []) {
+      const rate = Number(row.rate);
+      if (!rate) continue;
+      if (row.target_currency === 'CNY') {
+        rates[row.base_currency] = rate < 1 && row.base_currency !== 'HKD' ? 1 / rate : rate;
+        dbHasRates = true;
+      } else if (row.base_currency === 'CNY') {
+        rates[row.target_currency] = 1 / rate;
+        dbHasRates = true;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load rates from DB:', err.message);
+  }
+
+  if (!dbHasRates) {
+    try {
+      const rateRes = await fetch('https://api.frankfurter.dev/v1/latest?base=CNY&symbols=USD,HKD,CHF');
+      if (rateRes.ok) {
+        const rateData = await rateRes.json();
+        if (rateData.rates) {
+          if (rateData.rates.USD) rates.USD = 1 / rateData.rates.USD;
+          if (rateData.rates.HKD) rates.HKD = 1 / rateData.rates.HKD;
+          if (rateData.rates.CHF) rates.CHF = 1 / rateData.rates.CHF;
+        }
+      }
+    } catch (e) {
+      console.warn('OpenClaw live rate fetch failed, using fallback:', e.message);
+    }
   }
 
   return rates;
@@ -110,7 +139,8 @@ export async function onRequestGet({ env }) {
     // Cost in CNY: quantity × openPrice × open_rate_to_cny
     // If open_rate_to_cny is stored, prefer it (it's the rate at time of purchase).
     // For current value, we use the live rate.
-    const costCNY = pos.quantity * pos.open_price * (pos.open_rate_to_cny || rateToCNY);
+    const costRate = pos.open_rate_to_cny || rateToCNY;
+    const costCNY = (pos.quantity * pos.open_price + (pos.commission || 0)) * costRate;
 
     // Current value: use cached quote price, fall back to open price
     const quote = quoteMap.get(pos.symbol);
