@@ -11,7 +11,7 @@ description: 用于访问 StockVault 股票持仓管理与分析系统只读 API
 
 使用本技能前，需要从 StockVault 的前端“系统设置”页面生成 API 密钥 (API Key)，并配置以下环境变量或在请求中携带：
 
-- **API 密钥格式**：`sk-[a-f0-9]{64}` (例如：`sk-8f3b2...`)
+- **API 密钥格式**：`sk-[a-f0-9]{40}` (例如：`sk-8f3b2...`)
 - **API 基准 URL**：通常部署在 Cloudflare Pages，例如 `https://your-stockvault-domain.pages.dev` 或者是本地测试环境 `http://localhost:8788`
 
 ### 请求鉴权方式
