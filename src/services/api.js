@@ -79,7 +79,7 @@ async function request(endpoint, options = {}) {
       if (error.status !== 401) { // We probably don't want to toast every 401 if it's just redirecting to login, or maybe we do. We will toast it.
         Toast.error(error.message, `API 请求失败 (${error.status})`);
       } else {
-        Toast.warning('您的登录已过期，请重新登录。');
+        // Toast warning removed to avoid repetitive login expiration alerts
       }
       throw error;
     }
