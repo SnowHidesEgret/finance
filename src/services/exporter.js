@@ -108,3 +108,70 @@ export async function exportTradesCSV(fromDate, toDate) {
     throw error;
   }
 }
+
+const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF' };
+
+export async function exportOpenPositionsSummaryCSV() {
+  try {
+    const summary = await get('/api/summary');
+    const data = summary?.positions || [];
+    const totalValueCNY = summary?.totalValueCNY || 0;
+    const totalPnlCNY = summary?.totalPnlCNY || 0;
+    const totalPnlPercent = summary?.totalPnlPercent || 0;
+
+    // Filter only OPEN positions
+    const openPositions = data.filter(p => p.status === 'OPEN');
+
+    const headers = ['名称', '代码', '数量', '均价', '当前价格', '市值', '净盈亏%', '净收益/亏损'];
+    const headerRow = headers.map(h => `"${h}"`).join(',');
+
+    const rows = openPositions.map(pos => {
+      const qty = pos.quantity || 0;
+      const openPrice = pos.open_price || 0;
+      const curPrice = pos.currentPrice || 0;
+
+      // Local market value
+      const marketVal = curPrice * qty;
+      const curSymbol = CURRENCY_SYMBOL[pos.currency] || '';
+      const formattedMarketVal = `${curSymbol}${marketVal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      // Return %
+      const pnlPct = pos.pnlPercent || 0;
+      const formattedPnlPct = `${pnlPct.toFixed(2)}%`;
+
+      // Return CNY
+      const pnlCNY = pos.pnlCNY || 0;
+      const absPnlCNYStr = Math.abs(pnlCNY).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const formattedPnlCNY = pnlCNY < 0 ? `¥-${absPnlCNYStr}` : `¥${absPnlCNYStr}`;
+
+      return [
+        `"${pos.name || ''}"`,
+        `"${pos.symbol || ''}"`,
+        qty,
+        openPrice,
+        curPrice,
+        `"${formattedMarketVal}"`,
+        `"${formattedPnlPct}"`,
+        `"${formattedPnlCNY}"`
+      ].join(',');
+    });
+
+    // Summary rows
+    const formattedTotalVal = `¥${totalValueCNY.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const absTotalPnlCNYStr = Math.abs(totalPnlCNY).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const formattedTotalPnl = totalPnlCNY < 0 ? `¥-${absTotalPnlCNYStr}` : `¥${absTotalPnlCNYStr}`;
+    const formattedTotalPnlPct = `${totalPnlPercent.toFixed(2)}%`;
+    
+    const summaryRow1 = [`"市值"`, `"${formattedTotalVal}"`, '""', '""', '""', '""', '""', '""'].join(',');
+    const summaryRow2 = [`"收益/亏损"`, `"${formattedTotalPnl} / ${formattedTotalPnlPct}"`, '""', '""', '""', '""', '""', '""'].join(',');
+
+    const csvContent = [headerRow, ...rows, summaryRow1, summaryRow2].join('\n');
+    const dateStr = new Date().toISOString().split('T')[0];
+    downloadCSV(csvContent, `open_positions_summary_${dateStr}.csv`);
+    return true;
+  } catch (error) {
+    console.error('导出未平仓头寸汇总失败', error);
+    throw error;
+  }
+}
+

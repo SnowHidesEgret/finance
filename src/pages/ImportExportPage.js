@@ -2,7 +2,7 @@
  * StockVault — 导入导出页
  */
 import { generateTemplateCSV, parseFile, validateAndTransform, autoMapFields } from '../services/importer.js';
-import { exportPositionsCSV, exportTradesCSV } from '../services/exporter.js';
+import { exportPositionsCSV, exportTradesCSV, exportOpenPositionsSummaryCSV } from '../services/exporter.js';
 import { post } from '../services/api.js';
 import { navigate } from '../router/index.js';
 import { Toast } from '../utils/toast.js';
@@ -40,8 +40,9 @@ export async function renderImportExportPage(container) {
             将您的所有持仓和交易记录导出为 CSV 文件，方便您在其他软件中进行分析或备份。
           </p>
           
-          <div style="display:flex; gap:12px;">
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
             <button class="btn btn--ghost" id="btn-export-positions">导出当前持仓</button>
+            <button class="btn btn--ghost" id="btn-export-open-summary">导出未平仓头寸汇总</button>
             <button class="btn btn--ghost" id="btn-export-trades">导出交易记录</button>
           </div>
         </div>
@@ -136,6 +137,21 @@ export async function renderImportExportPage(container) {
       await exportPositionsCSV();
     } catch (err) {
       Toast.error('导出持仓失败: ' + err.message);
+    } finally {
+      btn.textContent = oldText;
+      btn.disabled = false;
+    }
+  });
+
+  container.querySelector('#btn-export-open-summary').addEventListener('click', async (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    const oldText = btn.textContent;
+    btn.textContent = '导出中...';
+    try {
+      await exportOpenPositionsSummaryCSV();
+    } catch (err) {
+      Toast.error('导出未平仓头寸汇总失败: ' + err.message);
     } finally {
       btn.textContent = oldText;
       btn.disabled = false;
