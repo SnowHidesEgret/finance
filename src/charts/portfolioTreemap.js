@@ -54,7 +54,8 @@ export function renderTreemap(container, data) {
         itemStyle: {
           borderColor: '#06080f',
           borderWidth: 2,
-          gapWidth: 1
+          gapWidth: 1,
+          borderRadius: 6
         }
       }
     ]
