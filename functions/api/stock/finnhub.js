@@ -27,7 +27,7 @@ function buildFinnhubUrl(type, symbol, apiKey) {
       const from = new Date(today);
       from.setDate(from.getDate() - 7);
       const to = new Date(today);
-      to.setDate(to.getDate() + 14);
+      to.setDate(to.getDate() + 30);
       return `${FINNHUB_BASE}/calendar/earnings?from=${fmt(from)}&to=${fmt(to)}&symbol=${encodeURIComponent(symbol)}&token=${apiKey}`;
     }
     default:
@@ -205,15 +205,25 @@ function mapYahooData(type, yahooData, symbol) {
 
     const mappedEarnings = [];
     if (earningsDateArray.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const fromDate = new Date(today);
+      fromDate.setDate(fromDate.getDate() - 7);
+      const toDate = new Date(today);
+      toDate.setDate(toDate.getDate() + 30);
+
       earningsDateArray.forEach(d => {
         if (d && d.raw) {
-          const dateStr = new Date(d.raw * 1000).toISOString().split('T')[0];
-          mappedEarnings.push({
-            date: dateStr,
-            symbol: symbol,
-            epsEstimate: earnings.earningsAverage?.raw || null,
-            hour: ''
-          });
+          const earningsDate = new Date(d.raw * 1000);
+          if (earningsDate >= fromDate && earningsDate <= toDate) {
+            const dateStr = earningsDate.toISOString().split('T')[0];
+            mappedEarnings.push({
+              date: dateStr,
+              symbol: symbol,
+              epsEstimate: earnings.earningsAverage?.raw || null,
+              hour: ''
+            });
+          }
         }
       });
     }
