@@ -147,20 +147,62 @@ async function fetchYtdPrice(yfSymbol) {
   }
 }
 
-  // ── 3. Fetch live quotes & YTD prices in parallel ─────────────────
+/**
+ * Fetch MTD (Month-To-Date) baseline price (closing price of the previous natural month)
+ * for a given symbol from Yahoo Finance.
+ */
+async function fetchMtdPrice(yfSymbol) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=2mo`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result || !result.timestamp || !result.indicators?.quote?.[0]?.close) return null;
+
+    const timestamps = result.timestamp;
+    const closes = result.indicators.quote[0].close;
+
+    const now = new Date();
+    const currentMonthStartMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    let prevMonthClose = null;
+    for (let i = timestamps.length - 1; i >= 0; i--) {
+      const tsMs = timestamps[i] * 1000;
+      if (tsMs < currentMonthStartMs) {
+        if (closes[i] != null) {
+          prevMonthClose = closes[i];
+          break;
+        }
+      }
+    }
+    return prevMonthClose;
+  } catch {
+    return null;
+  }
+}
+
+  // ── 3. Fetch live quotes, YTD & MTD prices in parallel ────────────
   // Deduplicate symbols
   const uniqueSymbols = [...new Set(positions.map(p => p.symbol))];
   
-  // Pre-load ytd_price from cache
+  // Pre-load ytd_price & mtd_price from cache
   let cachedYtdMap = new Map();
+  let cachedMtdMap = new Map();
   if (uniqueSymbols.length > 0) {
     const symbolsList = uniqueSymbols.map(s => `'${s}'`).join(',');
     try {
       const { results: cachedQuotes } = await env.DB.prepare(
-        `SELECT symbol, ytd_price FROM quote_cache WHERE symbol IN (${symbolsList})`
+        `SELECT symbol, ytd_price, mtd_price FROM quote_cache WHERE symbol IN (${symbolsList})`
       ).all();
       for (const row of cachedQuotes || []) {
         if (row.ytd_price != null) cachedYtdMap.set(row.symbol, row.ytd_price);
+        if (row.mtd_price != null) cachedMtdMap.set(row.symbol, row.mtd_price);
       }
     } catch (e) {
       console.warn('[summary] Failed to read quote_cache:', e.message);
@@ -172,33 +214,39 @@ async function fetchYtdPrice(yfSymbol) {
       const yfSym = toYahooSymbol(sym);
       const quotePromise = fetchYahooQuote(yfSym);
       let ytdPricePromise = Promise.resolve(cachedYtdMap.get(sym.toUpperCase()));
+      let mtdPricePromise = Promise.resolve(cachedMtdMap.get(sym.toUpperCase()));
       
       if (!cachedYtdMap.has(sym.toUpperCase())) {
         ytdPricePromise = fetchYtdPrice(yfSym);
       }
+      if (!cachedMtdMap.has(sym.toUpperCase())) {
+        mtdPricePromise = fetchMtdPrice(yfSym);
+      }
       
-      const [quote, ytdPrice] = await Promise.all([quotePromise, ytdPricePromise]);
-      return { sym, yfSym, quote, ytdPrice };
+      const [quote, ytdPrice, mtdPrice] = await Promise.all([quotePromise, ytdPricePromise, mtdPricePromise]);
+      return { sym, yfSym, quote, ytdPrice, mtdPrice };
     })
   );
 
   // Build quote map: original_symbol → quote data
   const quoteMap = new Map();
-  for (const { sym, yfSym, quote, ytdPrice } of quoteResults) {
+  for (const { sym, yfSym, quote, ytdPrice, mtdPrice } of quoteResults) {
     if (quote) {
       quote.ytdPrice = ytdPrice;
+      quote.mtdPrice = mtdPrice;
       quoteMap.set(sym.toUpperCase(), quote);
       // Also save to quote_cache for other endpoints (fire and forget)
       try {
         await env.DB.prepare(
-          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, currency, updated_at)
-           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, datetime('now'))
+          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, currency, updated_at)
+           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, datetime('now'))
            ON CONFLICT(symbol) DO UPDATE SET
              price = excluded.price,
              change_amount = excluded.change_amount,
              change_percent = excluded.change_percent,
              prev_close = excluded.prev_close,
              ytd_price = excluded.ytd_price,
+             mtd_price = excluded.mtd_price,
              currency = excluded.currency,
              updated_at = datetime('now')`,
         ).bind(
@@ -208,6 +256,7 @@ async function fetchYtdPrice(yfSymbol) {
           quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
           quote.prevClose,
           ytdPrice,
+          mtdPrice,
           quote.currency,
         ).run();
       } catch (e) {
@@ -221,6 +270,7 @@ async function fetchYtdPrice(yfSymbol) {
   let totalCostCNY  = 0;
   let totalDayPnL   = 0;
   let portfolioYtdPnlCNY = 0;
+  let portfolioMtdPnlCNY = 0;
 
   const marketBreakdown = {};
   const positionDetails = [];
@@ -234,6 +284,7 @@ async function fetchYtdPrice(yfSymbol) {
     const currentPrice = liveQuote?.price ?? p.open_price;
     const prevClose    = liveQuote?.prevClose ?? p.open_price;
     const ytdPrice     = liveQuote?.ytdPrice; // Dec 31 of last year
+    const mtdPrice     = liveQuote?.mtdPrice; // Last trading day of previous month
     const hasLivePrice = !!liveQuote;
 
     // Cost in original currency (open_price is in the position's own currency)
@@ -247,7 +298,7 @@ async function fetchYtdPrice(yfSymbol) {
     const pnlCNY         = round2(valueCNY - costCNY);
     const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
     
-    // Lot-level calculation & Realized YTD from partial/full sales
+    // Lot-level calculation & Realized YTD/MTD from partial/full sales
     const pTrades = tradesByPosition[p.id] || [];
     const buyTrades = [];
     const sellTrades = [];
@@ -259,13 +310,20 @@ async function fetchYtdPrice(yfSymbol) {
     const buyLots = buyTrades.map(t => ({ ...t, remaining: t.quantity }));
     let realizedYtdPnlNative = 0;
     let realizedYtdBaseNative = 0;
+    let realizedMtdPnlNative = 0;
+    let realizedMtdBaseNative = 0;
     
     const nowMs = Date.now();
-    const currentYear = new Date().getFullYear();
+    const nowObj = new Date();
+    const currentYear = nowObj.getFullYear();
+    const currentMonth = nowObj.getMonth();
+    const monthStartMs = new Date(currentYear, currentMonth, 1).getTime();
     
     for (const sell of sellTrades) {
       let sellQty = sell.quantity;
-      const isSellThisYear = (new Date(sell.trade_date).getFullYear() === currentYear);
+      const sellDate = new Date(sell.trade_date);
+      const isSellThisYear = (sellDate.getFullYear() === currentYear);
+      const isSellThisMonth = (isSellThisYear && sellDate.getMonth() === currentMonth);
 
       for (const buy of buyLots) {
         if (sellQty <= 0) break;
@@ -286,6 +344,19 @@ async function fetchYtdPrice(yfSymbol) {
            realizedYtdPnlNative += (lotProceedsNative - lotYtdBaseNative);
            realizedYtdBaseNative += lotYtdBaseNative;
         }
+
+        if (isSellThisMonth) {
+           const buyDate = new Date(buy.trade_date);
+           let lotMtdBasePrice = buy.price;
+           if (buyDate.getTime() < monthStartMs) {
+             if (mtdPrice && mtdPrice > 0) lotMtdBasePrice = mtdPrice;
+             else if (buyDate.getFullYear() < currentYear && ytdPrice && ytdPrice > 0) lotMtdBasePrice = ytdPrice;
+           }
+           const lotMtdBaseNative = matchedQty * lotMtdBasePrice;
+           const lotProceedsNative = matchedQty * sell.price;
+           realizedMtdPnlNative += (lotProceedsNative - lotMtdBaseNative);
+           realizedMtdBaseNative += lotMtdBaseNative;
+        }
       }
     }
     
@@ -297,6 +368,8 @@ async function fetchYtdPrice(yfSymbol) {
     
     let totalYtdPnLNative = 0;
     let totalYtdBaseNative = 0;
+    let totalMtdPnLNative = 0;
+    let totalMtdBaseNative = 0;
     
     for (const lot of activeLots) {
       const lotDays = Math.max(1, Math.floor((nowMs - new Date(lot.trade_date).getTime()) / (1000 * 60 * 60 * 24)));
@@ -309,7 +382,8 @@ async function fetchYtdPrice(yfSymbol) {
       const lotAnnualizedReturn = lotDays > 0 ? (lotPnlPercent / lotDays) * 365 : 0;
       
       // Lot YTD calculation
-      const lotYear = new Date(lot.trade_date).getFullYear();
+      const lotDate = new Date(lot.trade_date);
+      const lotYear = lotDate.getFullYear();
       let lotYtdBasePrice = lot.price; // default to purchase price if bought this year
       if (lotYear < currentYear && ytdPrice && ytdPrice > 0) {
         lotYtdBasePrice = ytdPrice; // use last year close if bought before this year
@@ -320,6 +394,22 @@ async function fetchYtdPrice(yfSymbol) {
       
       totalYtdBaseNative += lotYtdBaseNative;
       totalYtdPnLNative += lotYtdPnLNative;
+
+      // Lot MTD calculation (自然月基准)
+      let lotMtdBasePrice = lot.price; // default to purchase price if bought in current month
+      if (lotDate.getTime() < monthStartMs) {
+        if (mtdPrice && mtdPrice > 0) {
+          lotMtdBasePrice = mtdPrice;
+        } else if (lotYear < currentYear && ytdPrice && ytdPrice > 0) {
+          lotMtdBasePrice = ytdPrice;
+        }
+      }
+
+      const lotMtdBaseNative = lot.activeQuantity * lotMtdBasePrice;
+      const lotMtdPnLNative = lotValueNative - lotMtdBaseNative;
+
+      totalMtdBaseNative += lotMtdBaseNative;
+      totalMtdPnLNative += lotMtdPnLNative;
       
       processedLots.push({
         ...lot,
@@ -329,7 +419,8 @@ async function fetchYtdPrice(yfSymbol) {
         pnlNative: round2(lotPnLNative),
         pnlPercent: round2(lotPnlPercent),
         annualizedReturn: round2(lotAnnualizedReturn),
-        ytdPercent: lotYtdBaseNative > 0 ? round2((lotYtdPnLNative / lotYtdBaseNative) * 100) : 0
+        ytdPercent: lotYtdBaseNative > 0 ? round2((lotYtdPnLNative / lotYtdBaseNative) * 100) : 0,
+        mtdPercent: lotMtdBaseNative > 0 ? round2((lotMtdPnLNative / lotMtdBaseNative) * 100) : 0,
       });
       
       weightedHoldingDays += lotDays * lotCostCNYValue;
@@ -340,6 +431,10 @@ async function fetchYtdPrice(yfSymbol) {
     const positionYtdPnLNative = totalYtdPnLNative + realizedYtdPnlNative;
     const ytdPercent = positionYtdBaseNative > 0 ? round2((positionYtdPnLNative / positionYtdBaseNative) * 100) : 0;
     
+    const positionMtdBaseNative = totalMtdBaseNative + realizedMtdBaseNative;
+    const positionMtdPnLNative = totalMtdPnLNative + realizedMtdPnlNative;
+    const mtdPercent = positionMtdBaseNative > 0 ? round2((positionMtdPnLNative / positionMtdBaseNative) * 100) : 0;
+
     // Find the earliest trade date among ALL buy trades for this continuous position
     let earliestDate = p.open_date;
     if (buyTrades.length > 0) {
@@ -358,23 +453,26 @@ async function fetchYtdPrice(yfSymbol) {
     // Return rates (using avgHoldingDays)
     const holdingDays = displayHoldingDays;
     const annualizedReturn = round2((pnlPercent / avgHoldingDays) * 365);
-    const monthlyReturn    = round2((pnlPercent / avgHoldingDays) * 30);
+    const monthlyReturn    = mtdPercent;
 
     // Day PnL
     const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
 
-    // Accumulate YTD PnL in CNY (includes both active and realized this year)
+    // Accumulate YTD & MTD PnL in CNY (includes both active and realized)
     const posYtdPnlCNY = round2(positionYtdPnLNative * rateToCNY);
+    const posMtdPnlCNY = round2(positionMtdPnLNative * rateToCNY);
     portfolioYtdPnlCNY += posYtdPnlCNY;
+    portfolioMtdPnlCNY += posMtdPnlCNY;
 
     const mkt = p.market;
     if (!marketBreakdown[mkt]) {
-      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0, ytdPnl: 0 };
+      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0, ytdPnl: 0, mtdPnl: 0 };
     }
 
-    // If position is closed, only add its YTD to portfolio & market breakdown, skip active metrics
+    // If position is closed, only add its YTD/MTD to portfolio & market breakdown, skip active metrics
     if (p.status === 'CLOSED') {
       marketBreakdown[mkt].ytdPnl += posYtdPnlCNY;
+      marketBreakdown[mkt].mtdPnl += posMtdPnlCNY;
       continue;
     }
 
@@ -388,6 +486,7 @@ async function fetchYtdPrice(yfSymbol) {
     marketBreakdown[mkt].dayPnl += dayChangeCNY;
     marketBreakdown[mkt].weightedDays += avgHoldingDays * valueCNY;
     marketBreakdown[mkt].ytdPnl += posYtdPnlCNY;
+    marketBreakdown[mkt].mtdPnl += posMtdPnlCNY;
 
     positionDetails.push({
       ...p,
@@ -396,6 +495,8 @@ async function fetchYtdPrice(yfSymbol) {
       prevClose,
       ytdPrice,
       ytdPercent,
+      mtdPrice,
+      mtdPercent,
       rateToCNY,
       costCNY,
       marketValueCNY: valueCNY,
@@ -404,9 +505,10 @@ async function fetchYtdPrice(yfSymbol) {
       holdingDays, // used for UI display
       avgHoldingDays, // actual holding days used for math
       annualizedReturn,
-      monthlyReturn,
+      monthlyReturn: mtdPercent,
       dayPnLCNY: dayChangeCNY,
       ytdPnLCNY: posYtdPnlCNY,
+      mtdPnLCNY: posMtdPnlCNY,
       hasLivePrice,
       activeLots: processedLots,
       weight: 0, // calculated below
@@ -421,6 +523,7 @@ async function fetchYtdPrice(yfSymbol) {
   const totalPnlCNY     = round2(totalValueCNY - totalCostCNY);
   const totalPnlPercent = totalCostCNY !== 0 ? round2((totalPnlCNY / totalCostCNY) * 100) : 0;
   portfolioYtdPnlCNY = round2(portfolioYtdPnlCNY);
+  portfolioMtdPnlCNY = round2(portfolioMtdPnlCNY);
 
   // Portfolio-level weighted average holding days & return rates
   let totalWeightedDays = 0;
@@ -429,7 +532,11 @@ async function fetchYtdPrice(yfSymbol) {
   }
   const totalAvgHoldingDays   = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
   const totalAnnualizedReturn = round2((totalPnlPercent / totalAvgHoldingDays) * 365);
-  const totalMonthlyReturn    = round2((totalPnlPercent / totalAvgHoldingDays) * 30);
+  
+  const mtdCapitalBase = round2(totalValueCNY - portfolioMtdPnlCNY);
+  const totalMonthlyReturn = mtdCapitalBase > 0
+    ? round2((portfolioMtdPnlCNY / mtdCapitalBase) * 100)
+    : 0;
 
   // ── 5. Calculate portfolio YTD % ────────────────────────────────────
   // 为了解决年中大额加仓导致的 YTD 收益率失真（分子包含新购持仓利润，但分母由于严格倒推而缺少对应本金），
@@ -449,6 +556,8 @@ async function fetchYtdPrice(yfSymbol) {
     const mktPnlPct = data.cost !== 0 ? round2((data.pnl / data.cost) * 100) : 0;
     const mktYearStartValue = data.value - data.ytdPnl;
     const ytdPercent = mktYearStartValue > 0 ? round2((data.ytdPnl / mktYearStartValue) * 100) : 0;
+    const mktMonthStartValue = data.value - data.mtdPnl;
+    const mtdPercent = mktMonthStartValue > 0 ? round2((data.mtdPnl / mktMonthStartValue) * 100) : 0;
     const avgDays   = data.value > 0 ? Math.max(1, Math.round(data.weightedDays / data.value)) : 1;
     markets[mkt] = {
       totalValue:       round2(data.value),
@@ -460,7 +569,9 @@ async function fetchYtdPrice(yfSymbol) {
       pnlPercent:       mktPnlPct,
       avgHoldingDays:   avgDays,
       annualizedReturn: round2((mktPnlPct / avgDays) * 365),
-      monthlyReturn:    round2((mktPnlPct / avgDays) * 30),
+      monthlyReturn:    mtdPercent,
+      mtdPercent:       mtdPercent,
+      mtdPnlCNY:        round2(data.mtdPnl),
       positionCount:    data.count,
       dayPnL:           round2(data.dayPnl),
       ytdPnlCNY:        round2(data.ytdPnl),

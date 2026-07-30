@@ -433,7 +433,7 @@ function renderMarketCard(marketId, data, totalValue = 0) {
         <span class="market-summary-card__flag">${market.flag}</span>
         <span class="market-summary-card__name">${market.label}</span>
         <span style="margin-left:8px; font-size:0.8rem; font-weight:600;" class="market-summary-card__stat-value--${getPnLClass(data?.monthlyReturn || 0)}">
-          月收益 ${formatPercent(data?.monthlyReturn || 0)}
+          本月收益 ${formatPercent(data?.monthlyReturn || 0)}
         </span>
         <span style="margin-left:8px; font-size:0.8rem; font-weight:600;" class="market-summary-card__stat-value--${getPnLClass(data?.annualizedReturn || 0)}">
           年化 ${formatPercent(data?.annualizedReturn || 0)}
