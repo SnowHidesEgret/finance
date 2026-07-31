@@ -149,7 +149,7 @@ async function fetchYtdPrice(yfSymbol) {
 
 /**
  * Fetch MTD (Month-To-Date) baseline price (closing price of the previous natural month)
- * for a given symbol from Yahoo Finance.
+ * for a given symbol from Yahoo Finance, accurately respecting the exchange's local timezone.
  */
 async function fetchMtdPrice(yfSymbol) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=2mo`;
@@ -167,18 +167,35 @@ async function fetchMtdPrice(yfSymbol) {
 
     const timestamps = result.timestamp;
     const closes = result.indicators.quote[0].close;
+    const timeZone = result.meta?.exchangeTimezoneName || 'Asia/Shanghai';
 
     const now = new Date();
-    const currentMonthStartMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const currentFmt = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric' });
+    const currentParts = currentFmt.formatToParts(now);
+    let curYear = now.getFullYear();
+    let curMonth = now.getMonth();
+    for (const p of currentParts) {
+      if (p.type === 'year') curYear = parseInt(p.value, 10);
+      if (p.type === 'month') curMonth = parseInt(p.value, 10) - 1;
+    }
+
+    const candleFmt = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric' });
 
     let prevMonthClose = null;
     for (let i = timestamps.length - 1; i >= 0; i--) {
-      const tsMs = timestamps[i] * 1000;
-      if (tsMs < currentMonthStartMs) {
-        if (closes[i] != null) {
-          prevMonthClose = closes[i];
-          break;
-        }
+      if (closes[i] == null) continue;
+      const cDate = new Date(timestamps[i] * 1000);
+      const cParts = candleFmt.formatToParts(cDate);
+      let cYear = cDate.getFullYear();
+      let cMonth = cDate.getMonth();
+      for (const p of cParts) {
+        if (p.type === 'year') cYear = parseInt(p.value, 10);
+        if (p.type === 'month') cMonth = parseInt(p.value, 10) - 1;
+      }
+
+      if (cYear < curYear || (cYear === curYear && cMonth < curMonth)) {
+        prevMonthClose = closes[i];
+        break;
       }
     }
     return prevMonthClose;
