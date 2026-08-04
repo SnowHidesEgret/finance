@@ -87,7 +87,9 @@ async function loadMarketData(container) {
     _cachedSummary = summaryData;
     _cachedPositions = summaryData?.positions?.filter(p => p.status === 'OPEN') || (Array.isArray(allPositions) ? allPositions : []);
 
-    const marketPositions = _cachedPositions.filter(p => p.market === _currentMarket);
+    const marketPositions = _cachedPositions
+      .filter(p => p.market === _currentMarket)
+      .sort((a, b) => (b.marketValueCNY || b.valueCNY || 0) - (a.marketValueCNY || a.valueCNY || 0));
     const marketSummary = summaryData?.markets?.[_currentMarket] || summaryData?.marketSummaries?.[_currentMarket] || {};
     const marketLabel = MARKETS[_currentMarket]?.label || _currentMarket;
 
@@ -142,6 +144,12 @@ function renderOverviewSection(positions, marketSummary) {
 
   const totalMarketValueCNY = positions.reduce((sum, p) => sum + (p.marketValueCNY || p.valueCNY || 0), 0);
 
+  const sortedPositions = [...positions].sort((a, b) => {
+    const valA = a.marketValueCNY || a.valueCNY || 0;
+    const valB = b.marketValueCNY || b.valueCNY || 0;
+    return valB - valA;
+  });
+
   return `
     <section class="market-page__overview animate-fade-in-up">
       <div class="market-page__kpi-row">
@@ -187,7 +195,7 @@ function renderOverviewSection(positions, marketSummary) {
               </tr>
             </thead>
             <tbody>
-              ${positions.map(pos => {
+              ${sortedPositions.map(pos => {
                 const currency = pos.currency || MARKETS[pos.market]?.currency || 'CNY';
                 const sym = CURRENCY_SYMBOL[currency] || '';
                 const pnl = pos.pnlCNY || pos.pnl_cny || 0;
