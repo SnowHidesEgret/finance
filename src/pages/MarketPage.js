@@ -140,6 +140,8 @@ function renderOverviewSection(positions, marketSummary) {
 
   const CURRENCY_SYMBOL = { CNY: '¥', USD: '$', HKD: 'HK$', CHF: 'CHF ' };
 
+  const totalMarketValueCNY = positions.reduce((sum, p) => sum + (p.marketValueCNY || p.valueCNY || 0), 0);
+
   return `
     <section class="market-page__overview animate-fade-in-up">
       <div class="market-page__kpi-row">
@@ -192,7 +194,7 @@ function renderOverviewSection(positions, marketSummary) {
                 const pnlPercent = pos.pnlPercent || pos.pnl_percent || 0;
                 const currentPrice = pos.currentPrice || pos.current_price || pos.open_price || 0;
                 const marketValueCNY = pos.marketValueCNY || pos.valueCNY || 0;
-                const weight = pos.weight || 0;
+                const weight = totalMarketValueCNY > 0 ? (marketValueCNY / totalMarketValueCNY) * 100 : 0;
 
                 return `
                   <tr class="table__row table__row--hoverable">

@@ -223,6 +223,21 @@ async function fetchMtdPrice(yfSymbol) {
       }
     } catch (e) {
       console.warn('[summary] Failed to read quote_cache:', e.message);
+      // Auto-migrate missing columns if D1 table schema is outdated
+      if (e.message && (e.message.includes('no such column: mtd_price') || e.message.includes('no such column: ytd_price'))) {
+        try {
+          if (e.message.includes('mtd_price')) {
+            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run();
+            console.log('[summary] Auto-added missing mtd_price column to quote_cache');
+          }
+          if (e.message.includes('ytd_price')) {
+            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run();
+            console.log('[summary] Auto-added missing ytd_price column to quote_cache');
+          }
+        } catch (alterErr) {
+          console.warn('[summary] Failed to auto-migrate quote_cache schema:', alterErr.message);
+        }
+      }
     }
   }
 
@@ -277,7 +292,43 @@ async function fetchMtdPrice(yfSymbol) {
           quote.currency,
         ).run();
       } catch (e) {
-        console.warn('[summary] Failed to update quote_cache for', sym, e.message);
+        if (e.message && (e.message.includes('no such column: mtd_price') || e.message.includes('no such column: ytd_price'))) {
+          try {
+            if (e.message.includes('mtd_price')) {
+              await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run();
+            }
+            if (e.message.includes('ytd_price')) {
+              await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run();
+            }
+            // Retry insert once
+            await env.DB.prepare(
+              `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, currency, updated_at)
+               VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, datetime('now'))
+               ON CONFLICT(symbol) DO UPDATE SET
+                 price = excluded.price,
+                 change_amount = excluded.change_amount,
+                 change_percent = excluded.change_percent,
+                 prev_close = excluded.prev_close,
+                 ytd_price = excluded.ytd_price,
+                 mtd_price = excluded.mtd_price,
+                 currency = excluded.currency,
+                 updated_at = datetime('now')`,
+            ).bind(
+              sym.toUpperCase(),
+              quote.price,
+              round2(quote.price - quote.prevClose),
+              quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
+              quote.prevClose,
+              ytdPrice,
+              mtdPrice,
+              quote.currency,
+            ).run();
+          } catch (retryErr) {
+            console.warn('[summary] Failed to update quote_cache after column auto-migration for', sym, retryErr.message);
+          }
+        } else {
+          console.warn('[summary] Failed to update quote_cache for', sym, e.message);
+        }
       }
     }
   }
