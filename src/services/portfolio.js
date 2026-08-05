@@ -101,6 +101,20 @@ export function calculateClosedPnL(position, currentRateToCny = null) {
   };
 }
 
+/** Standardize date string to YYYY-MM-DD for date comparison */
+function getYYYYMMDD(dateVal) {
+  if (!dateVal) return '';
+  if (typeof dateVal === 'string') {
+    const match = dateVal.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (match) {
+      return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+    }
+  }
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /**
  * 计算投资组合汇总
  * @param {Array} positions - 持仓列表
@@ -147,9 +161,14 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     
     const pnl = calculatePositionPnL(pos, currentPrice, rateToCNY);
     
-    // 日盈亏
+    // 日盈亏 (对于今天新买入的持仓，以买入开仓价格 open_price 为基准)
+    const todayYMD = getYYYYMMDD(new Date());
+    const isBoughtToday = getYYYYMMDD(pos.open_date) === todayYMD;
     const prevClose = quote?.prev_close || currentPrice;
-    const dayChange = (currentPrice - prevClose) * pos.quantity * rateToCNY;
+    const basePrice = isBoughtToday ? pos.open_price : prevClose;
+    const dayChange = (currentPrice - basePrice) * pos.quantity * rateToCNY;
+
+
     
     const detail = {
       ...pos,

@@ -34,6 +34,21 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
+/** Standardize date string to YYYY-MM-DD for date comparison */
+function getYYYYMMDD(dateVal) {
+  if (!dateVal) return '';
+  if (typeof dateVal === 'string') {
+    const match = dateVal.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (match) {
+      return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+    }
+  }
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+
 /**
  * Fetch a single quote from Yahoo Finance chart API.
  * Returns { price, prevClose, currency } or null on failure.
@@ -524,7 +539,23 @@ async function fetchMtdPrice(yfSymbol) {
     const monthlyReturn    = mtdPercent;
 
     // Day PnL
-    const dayChangeCNY   = round2((currentPrice - prevClose) * p.quantity * rateToCNY);
+    // For stocks/lots bought today, use purchase price (lot.price or p.open_price) as baseline price
+    const todayYMD = getYYYYMMDD(nowObj);
+    let dayChangeCNY = 0;
+    if (activeLots && activeLots.length > 0) {
+      let totalDayPnLNative = 0;
+      for (const lot of activeLots) {
+        const isLotBoughtToday = getYYYYMMDD(lot.trade_date) === todayYMD;
+        const basePrice = isLotBoughtToday ? lot.price : prevClose;
+        totalDayPnLNative += (currentPrice - basePrice) * lot.activeQuantity;
+      }
+      dayChangeCNY = round2(totalDayPnLNative * rateToCNY);
+    } else {
+      const isPositionBoughtToday = getYYYYMMDD(p.open_date) === todayYMD;
+      const basePrice = isPositionBoughtToday ? p.open_price : prevClose;
+      dayChangeCNY = round2((currentPrice - basePrice) * p.quantity * rateToCNY);
+    }
+
 
     // Accumulate YTD & MTD PnL in CNY (includes both active and realized)
     const posYtdPnlCNY = round2(positionYtdPnLNative * rateToCNY);
