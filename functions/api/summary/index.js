@@ -49,9 +49,22 @@ function getYYYYMMDD(dateVal) {
 }
 
 
+/** Get today's YYYY-MM-DD date formatted in the market's local timezone */
+function getMarketTodayYMD(market = 'A_SHARE', now = new Date()) {
+  let timeZone = 'Asia/Shanghai';
+  if (market === 'US') timeZone = 'America/New_York';
+  else if (market === 'SWISS') timeZone = 'Europe/Zurich';
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    return fmt.format(now);
+  } catch {
+    return getYYYYMMDD(now);
+  }
+}
+
 /**
  * Fetch a single quote from Yahoo Finance chart API.
- * Returns { price, prevClose, currency } or null on failure.
+ * Returns { price, prevClose, currency, marketDate } or null on failure.
  */
 async function fetchYahooQuote(yfSymbol) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=1d`;
@@ -66,15 +79,29 @@ async function fetchYahooQuote(yfSymbol) {
     const data = await res.json();
     const meta = data?.chart?.result?.[0]?.meta;
     if (!meta || !meta.regularMarketPrice) return null;
+
+    let marketDate = null;
+    if (meta.regularMarketTime) {
+      const tz = meta.exchangeTimezoneName || 'Asia/Shanghai';
+      try {
+        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+        marketDate = fmt.format(new Date(meta.regularMarketTime * 1000));
+      } catch {
+        marketDate = new Date(meta.regularMarketTime * 1000).toISOString().slice(0, 10);
+      }
+    }
+
     return {
       price:      meta.regularMarketPrice,
       prevClose:  meta.chartPreviousClose || meta.regularMarketPrice,
       currency:   meta.currency || '',
+      marketDate: marketDate,
     };
   } catch {
     return null;
   }
 }
+
 
 /**
  * GET handler — global portfolio summary.
@@ -539,22 +566,25 @@ async function fetchMtdPrice(yfSymbol) {
     const monthlyReturn    = mtdPercent;
 
     // Day PnL
-    // For stocks/lots bought today, use purchase price (lot.price or p.open_price) as baseline price
-    const todayYMD = getYYYYMMDD(nowObj);
+    // For stocks/lots bought on or after the quote date (or today in market timezone), use purchase price as baseline price
+    const effectiveQuoteDate = liveQuote?.marketDate || getMarketTodayYMD(p.market, nowObj);
     let dayChangeCNY = 0;
     if (activeLots && activeLots.length > 0) {
       let totalDayPnLNative = 0;
       for (const lot of activeLots) {
-        const isLotBoughtToday = getYYYYMMDD(lot.trade_date) === todayYMD;
+        const lotTradeYMD = getYYYYMMDD(lot.trade_date);
+        const isLotBoughtToday = lotTradeYMD && lotTradeYMD >= effectiveQuoteDate;
         const basePrice = isLotBoughtToday ? lot.price : prevClose;
         totalDayPnLNative += (currentPrice - basePrice) * lot.activeQuantity;
       }
       dayChangeCNY = round2(totalDayPnLNative * rateToCNY);
     } else {
-      const isPositionBoughtToday = getYYYYMMDD(p.open_date) === todayYMD;
+      const posOpenYMD = getYYYYMMDD(p.open_date);
+      const isPositionBoughtToday = posOpenYMD && posOpenYMD >= effectiveQuoteDate;
       const basePrice = isPositionBoughtToday ? p.open_price : prevClose;
       dayChangeCNY = round2((currentPrice - basePrice) * p.quantity * rateToCNY);
     }
+
 
 
     // Accumulate YTD & MTD PnL in CNY (includes both active and realized)

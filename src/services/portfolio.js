@@ -115,6 +115,19 @@ function getYYYYMMDD(dateVal) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** Get today's YYYY-MM-DD date formatted in the market's local timezone */
+function getMarketTodayYMD(market = 'A_SHARE', now = new Date()) {
+  let timeZone = 'Asia/Shanghai';
+  if (market === 'US') timeZone = 'America/New_York';
+  else if (market === 'SWISS') timeZone = 'Europe/Zurich';
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+    return fmt.format(now);
+  } catch {
+    return getYYYYMMDD(now);
+  }
+}
+
 /**
  * 计算投资组合汇总
  * @param {Array} positions - 持仓列表
@@ -161,12 +174,14 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     
     const pnl = calculatePositionPnL(pos, currentPrice, rateToCNY);
     
-    // 日盈亏 (对于今天新买入的持仓，以买入开仓价格 open_price 为基准)
-    const todayYMD = getYYYYMMDD(new Date());
-    const isBoughtToday = getYYYYMMDD(pos.open_date) === todayYMD;
+    // 日盈亏 (对于当期/买入日及之后的持仓，以买入开仓价格 open_price 为基准)
+    const effectiveQuoteDate = quote?.marketDate || getMarketTodayYMD(pos.market, new Date());
+    const posOpenYMD = getYYYYMMDD(pos.open_date);
+    const isBoughtToday = posOpenYMD && posOpenYMD >= effectiveQuoteDate;
     const prevClose = quote?.prev_close || currentPrice;
     const basePrice = isBoughtToday ? pos.open_price : prevClose;
     const dayChange = (currentPrice - basePrice) * pos.quantity * rateToCNY;
+
 
 
     
