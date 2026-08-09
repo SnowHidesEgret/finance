@@ -244,17 +244,46 @@
   letter-spacing: 0.01em;
 }
 
-.market-summary-card__count {
+.market-summary-card__count-capsules {
   margin-left: auto;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  background: rgba(255,255,255,0.08);
-  padding: 3px 10px;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.06);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 4px 8px;
+  border-radius: 12px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.04);
+}
+
+.market-summary-card:hover .market-summary-card__count-capsules {
+  border-color: color-mix(in srgb, var(--card-accent) 55%, transparent);
+  background: rgba(15, 23, 42, 0.75);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--card-accent) 30%, transparent);
+}
+
+.mini-capsule-item {
+  display: inline-block;
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--card-accent, #3b82f6);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--card-accent, #3b82f6) 65%, transparent);
+  transition: transform 0.2s ease;
+}
+
+.market-summary-card:hover .mini-capsule-item {
+  transform: scaleY(1.1);
+}
+
+.mini-capsule-overflow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--card-accent, #3b82f6);
+  margin-left: 2px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 /* --- Body Stats Grid --- */

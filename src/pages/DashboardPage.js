@@ -410,6 +410,24 @@ function generateSparklineSVG(pnlPct, marketId) {
 }
 
 /**
+ * 生成市场卡片头部的微型胶囊指示器（仅保留胶囊图标，不含“X笔”文字）
+ */
+function generateMiniCapsuleStack(count) {
+  if (count <= 0) return '';
+  const maxCapsules = 6;
+  const visible = Math.min(count, maxCapsules);
+  
+  let capsules = '';
+  for (let i = 0; i < visible; i++) {
+    capsules += `<span class="mini-capsule-item"></span>`;
+  }
+  if (count > maxCapsules) {
+    capsules += `<span class="mini-capsule-overflow">+${count - maxCapsules}</span>`;
+  }
+  return `<span class="market-summary-card__count-capsules" title="持仓股票数: ${count} 笔">${capsules}</span>`;
+}
+
+/**
  * 渲染单个市场卡片 — Premium Redesign
  */
 function renderMarketCard(marketId, data, totalValue = 0) {
@@ -426,6 +444,7 @@ function renderMarketCard(marketId, data, totalValue = 0) {
   const pctArrow = pnlPct > 0 ? '<span class="market-summary-card__arrow">↑</span>' : pnlPct < 0 ? '<span class="market-summary-card__arrow">↓</span>' : '';
   
   const sparklineSVG = generateSparklineSVG(pnlPct, marketId);
+  const miniCapsules = generateMiniCapsuleStack(count);
   
   return `
     <div class="market-summary-card market-summary-card--${marketId.toLowerCase()}" data-market="${marketId}" style="cursor:pointer;" title="点击查看持仓明细">
@@ -438,7 +457,7 @@ function renderMarketCard(marketId, data, totalValue = 0) {
         <span style="margin-left:8px; font-size:0.8rem; font-weight:600;" class="market-summary-card__stat-value--${getPnLClass(data?.annualizedReturn || 0)}">
           年化 ${formatPercent(data?.annualizedReturn || 0)}
         </span>
-        <span class="market-summary-card__count">${count} 笔</span>
+        ${miniCapsules}
       </div>
       
       <div class="market-summary-card__body">
