@@ -758,6 +758,7 @@ async function fetchMtdPrice(yfSymbol) {
         totalMonthlyReturn,
         portfolioYtdPnlCNY,
         portfolioYtdPercent,
+        portfolioMtdPnlCNY,
         dayPnl:         round2(totalDayPnL),
         positionCount:  positionDetails.length,
         marketCounts:   Object.fromEntries(Object.entries(marketBreakdown).map(([m, d]) => [m, d.count])),

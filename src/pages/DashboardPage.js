@@ -68,9 +68,15 @@ export async function renderDashboardPage(container) {
 
       <!-- 各国市场概览 -->
       <section class="dashboard__section animate-fade-in-up delay-2">
-        <h2 class="dashboard__section-title">
-          <span class="dashboard__section-icon"><i data-lucide="globe"></i></span>
-          各国市场概览
+        <h2 class="dashboard__section-title" style="display:flex; align-items:center; gap:var(--space-3); flex-wrap:wrap;">
+          <span style="display:inline-flex; align-items:center; gap:var(--space-2);">
+            <span class="dashboard__section-icon"><i data-lucide="globe"></i></span>
+            各国市场概览
+          </span>
+          <span id="overview-monthly-badge" class="market-overview__monthly-badge" title="全市场汇总本月收益率">
+            <span class="market-overview__monthly-label">本月收益</span>
+            <span id="val-overview-monthly-pct" class="market-overview__monthly-val">--</span>
+          </span>
         </h2>
         <div class="dashboard__market-overview" id="market-overview">
           ${MARKET_IDS.map(id => renderMarketCard(id, null)).join('')}
@@ -251,7 +257,7 @@ async function loadDashboardData(container) {
       if (quoteData) {
         cachedMarketSummaries = quoteData.markets || quoteData.marketSummaries || {};
         updateKPICards(quoteData);
-        updateMarketOverview(cachedMarketSummaries);
+        updateMarketOverview(cachedMarketSummaries, quoteData);
         updatePositionTable(quoteData.positions || positionList, rates);
         updateCharts(quoteData, positionList, rates);
         return;
@@ -277,7 +283,7 @@ async function loadDashboardData(container) {
     });
     
     cachedMarketSummaries = summary.marketSummaries || {};
-    updateMarketOverview(cachedMarketSummaries);
+    updateMarketOverview(cachedMarketSummaries, summary);
     updatePositionTable(summary.positions || positionList, rates);
     updateCharts(summary, positionList, rates);
     
@@ -350,16 +356,29 @@ function updateKPICards(data) {
 /**
  * 更新各国市场概览
  */
-function updateMarketOverview(marketData) {
+function updateMarketOverview(marketData, portfolioSummary = {}) {
   const overview = document.getElementById('market-overview');
   if (!overview) return;
   
-  const totalValue = Object.values(marketData).reduce((sum, m) => sum + (m.totalValue || 0), 0);
+  const totalValue = portfolioSummary.totalValueCNY || Object.values(marketData).reduce((sum, m) => sum + (m.totalValue || 0), 0);
   
   overview.innerHTML = MARKET_IDS.map(id => {
     const data = marketData[id] || {};
     return renderMarketCard(id, data, totalValue);
   }).join('');
+
+  // 更新 header 后的全市场本月收益
+  const monthlyReturn = portfolioSummary.totalMonthlyReturn ?? portfolioSummary.portfolioMtdPercent ?? 0;
+  const pnlClass = getPnLClass(monthlyReturn);
+  const mtdBadgeEl = document.getElementById('overview-monthly-badge');
+  const mtdPctEl = document.getElementById('val-overview-monthly-pct');
+  
+  if (mtdPctEl) {
+    mtdPctEl.textContent = formatPercent(monthlyReturn);
+  }
+  if (mtdBadgeEl) {
+    mtdBadgeEl.className = `market-overview__monthly-badge market-overview__monthly-badge--${pnlClass}`;
+  }
 }
 
 /**

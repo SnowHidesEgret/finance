@@ -162,6 +162,51 @@
   gap: var(--space-4);
 }
 
+.market-overview__monthly-badge {
+  margin-left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.25s ease;
+}
+
+.market-overview__monthly-badge--profit {
+  color: var(--color-profit);
+  background: color-mix(in srgb, var(--color-profit) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-profit) 28%, transparent);
+}
+
+.market-overview__monthly-badge--loss {
+  color: var(--color-loss);
+  background: color-mix(in srgb, var(--color-loss) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-loss) 28%, transparent);
+}
+
+.market-overview__monthly-badge--neutral {
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.market-overview__monthly-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.9;
+}
+
+.market-overview__monthly-val {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: 800;
+  color: inherit;
+}
+
 /* --- Card Shell: Glassmorphism + Neon Glow --- */
 .market-summary-card {
   --card-accent: var(--color-accent);
@@ -219,6 +264,7 @@
 .market-summary-card--hk      { --card-accent: var(--color-market-hk); }
 .market-summary-card--us      { --card-accent: var(--color-market-us); }
 .market-summary-card--swiss   { --card-accent: var(--color-market-ch); }
+.market-summary-card--mtd     { --card-accent: #a855f7; }
 
 /* --- Header --- */
 .market-summary-card__header {

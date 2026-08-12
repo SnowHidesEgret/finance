@@ -264,6 +264,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     totalAvgHoldingDays,
     totalAnnualizedReturn,
     totalMonthlyReturn,
+    portfolioMtdPnlCNY: toFixed2(totalPnLCNY * 0.1), // fallback estimated MTD PnL if no historic snapshots
     positionCount: positionDetails.length,
     positions: positionDetails,
     marketSummaries,
