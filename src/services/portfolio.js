@@ -11,9 +11,10 @@ import { MARKETS } from '../utils/constants.js';
  * @param {Object} position - 持仓记录
  * @param {number} currentPrice - 当前价格（原始货币）
  * @param {number} rateToCNY - 当前汇率（1单位外币 = ? CNY）
+ * @param {Object} [quote=null] - 当前行情对象
  * @returns {Object} 盈亏计算结果
  */
-export function calculatePositionPnL(position, currentPrice, rateToCNY) {
+export function calculatePositionPnL(position, currentPrice, rateToCNY, quote = null) {
   const {
     open_price, quantity, commission = 0,
     open_rate_to_cny, currency
@@ -43,7 +44,19 @@ export function calculatePositionPnL(position, currentPrice, rateToCNY) {
   
   // 年化收益率 (%)
   const annualizedReturn = toFixed2((pnlPercent / holdingDays) * 365);
-  const monthlyReturn = toFixed2((pnlPercent / holdingDays) * 30);
+  
+  // 自然月本月收益率 (MTD)
+  const now = new Date();
+  const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const posOpenYMD = getYYYYMMDD(position.open_date);
+  const isBoughtBeforeMonth = posOpenYMD && posOpenYMD < currentMonthStart;
+  const mtdPrice = quote?.mtdPrice || quote?.mtd_price || (isBoughtBeforeMonth ? (quote?.prev_close || quote?.prevClose) : null);
+  const mtdBasePrice = isBoughtBeforeMonth ? (mtdPrice || open_price) : open_price;
+  const mtdBaseNative = quantity * mtdBasePrice;
+  const mtdPnLNative = (currentPrice - mtdBasePrice) * quantity;
+  const mtdPnLCNY = toFixed2(mtdPnLNative * currentRate);
+  const mtdBaseCNY = toFixed2(mtdBaseNative * currentRate);
+  const monthlyReturn = mtdBaseCNY > 0 ? toFixed2((mtdPnLCNY / mtdBaseCNY) * 100) : 0;
   
   return {
     costOriginal: toFixed2(costInOriginal),
@@ -55,6 +68,8 @@ export function calculatePositionPnL(position, currentPrice, rateToCNY) {
     holdingDays,
     annualizedReturn,
     monthlyReturn,
+    mtdPnLCNY,
+    mtdBaseCNY,
     currentPrice,
     currentRate
   };
@@ -88,7 +103,19 @@ export function calculateClosedPnL(position, currentRateToCny = null) {
     (new Date(close_date || new Date()) - new Date(open_date)) / (1000 * 60 * 60 * 24)
   ));
   const annualizedReturn = toFixed2((realizedPnLPercent / holdingDays) * 365);
-  const monthlyReturn = toFixed2((realizedPnLPercent / holdingDays) * 30);
+  
+  // 自然月本月收益率 (MTD)
+  const now = new Date();
+  const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const closeYMD = getYYYYMMDD(close_date || new Date());
+  const isClosedThisMonth = closeYMD && closeYMD >= currentMonthStart;
+  const openYMD = getYYYYMMDD(open_date);
+  const isBoughtBeforeMonth = openYMD && openYMD < currentMonthStart;
+  
+  let monthlyReturn = 0;
+  if (isClosedThisMonth) {
+    monthlyReturn = realizedPnLPercent;
+  }
   
   return {
     costCNY,
@@ -139,6 +166,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
   let totalValueCNY = 0;
   let totalCostCNY = 0;
   let totalDayPnL = 0;
+  let portfolioTotalMtdPnL = 0;
   
   const positionDetails = [];
   const marketSummaries = {};
@@ -153,6 +181,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
       totalValue: 0,
       totalCost: 0,
       totalPnL: 0,
+      totalMtdPnL: 0,
       positionCount: 0,
       totalWeightedDays: 0,
       positions: []
@@ -172,19 +201,16 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
       rateToCNY = 1 / rates[currency]; // rates 是以 CNY 为基准的
     }
     
-    const pnl = calculatePositionPnL(pos, currentPrice, rateToCNY);
+    const pnl = calculatePositionPnL(pos, currentPrice, rateToCNY, quote);
     
     // 日盈亏 (对于当期/买入日及之后的持仓，以买入开仓价格 open_price 为基准)
     const effectiveQuoteDate = quote?.marketDate || getMarketTodayYMD(pos.market, new Date());
     const posOpenYMD = getYYYYMMDD(pos.open_date);
     const isBoughtToday = posOpenYMD && posOpenYMD >= effectiveQuoteDate;
-    const prevClose = quote?.prev_close || currentPrice;
+    const prevClose = quote?.prev_close || quote?.prevClose || currentPrice;
     const basePrice = isBoughtToday ? pos.open_price : prevClose;
     const dayChange = (currentPrice - basePrice) * pos.quantity * rateToCNY;
 
-
-
-    
     const detail = {
       ...pos,
       ...pnl,
@@ -197,6 +223,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     totalValueCNY += pnl.marketValueCNY;
     totalCostCNY += pnl.costCNY;
     totalDayPnL += dayChange;
+    portfolioTotalMtdPnL += (pnl.mtdPnLCNY || 0);
     
     // 市场汇总
     if (marketSummaries[pos.market]) {
@@ -204,6 +231,7 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
       ms.totalValue += pnl.marketValueCNY;
       ms.totalCost += pnl.costCNY;
       ms.totalPnL += pnl.pnlCNY;
+      ms.totalMtdPnL += (pnl.mtdPnLCNY || 0);
       ms.positionCount++;
       ms.totalWeightedDays += pnl.holdingDays * pnl.marketValueCNY;
       ms.positions.push(detail);
@@ -229,18 +257,22 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
       : 0;
   }
   
-  // 计算市场占比
+  // 计算市场占比与月收益率
   for (const ms of Object.values(marketSummaries)) {
     ms.totalValue = toFixed2(ms.totalValue);
     ms.totalCost = toFixed2(ms.totalCost);
     ms.totalPnL = toFixed2(ms.totalPnL);
     ms.pnlPercent = ms.totalCost > 0 ? toFixed2((ms.totalPnL / ms.totalCost) * 100) : 0;
     ms.weight = totalValueCNY > 0 ? toFixed2((ms.totalValue / totalValueCNY) * 100) : 0;
-    // 加权平均持仓天数 → 年化 / 月收益率
+    // 加权平均持仓天数 → 年化收益率
     const avgDays = ms.totalValue > 0 ? Math.max(1, Math.round(ms.totalWeightedDays / ms.totalValue)) : 1;
     ms.avgHoldingDays = avgDays;
     ms.annualizedReturn = toFixed2((ms.pnlPercent / avgDays) * 365);
-    ms.monthlyReturn = toFixed2((ms.pnlPercent / avgDays) * 30);
+    
+    // 自然月本月收益率 (MTD)
+    const mtdCapitalBase = ms.totalValue - ms.totalMtdPnL;
+    ms.monthlyReturn = mtdCapitalBase > 0 ? toFixed2((ms.totalMtdPnL / mtdCapitalBase) * 100) : 0;
+    ms.mtdPercent = ms.monthlyReturn;
   }
   
   const totalPnLCNY = toFixed2(totalValueCNY - totalCostCNY);
@@ -253,7 +285,12 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
   }
   const totalAvgHoldingDays = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
   const totalAnnualizedReturn = toFixed2((totalPnLPercent / totalAvgHoldingDays) * 365);
-  const totalMonthlyReturn = toFixed2((totalPnLPercent / totalAvgHoldingDays) * 30);
+  
+  // 组合级自然月本月收益率 (MTD)
+  const totalMtdCapitalBase = totalValueCNY - portfolioTotalMtdPnL;
+  const totalMonthlyReturn = totalMtdCapitalBase > 0
+    ? toFixed2((portfolioTotalMtdPnL / totalMtdCapitalBase) * 100)
+    : 0;
   
   return {
     totalValueCNY: toFixed2(totalValueCNY),
@@ -264,7 +301,8 @@ export function calculatePortfolioSummary(positions, quotes, rates) {
     totalAvgHoldingDays,
     totalAnnualizedReturn,
     totalMonthlyReturn,
-    portfolioMtdPnlCNY: toFixed2(totalPnLCNY * 0.1), // fallback estimated MTD PnL if no historic snapshots
+    portfolioMtdPnlCNY: toFixed2(portfolioTotalMtdPnL),
+    portfolioMtdPercent: totalMonthlyReturn,
     positionCount: positionDetails.length,
     positions: positionDetails,
     marketSummaries,

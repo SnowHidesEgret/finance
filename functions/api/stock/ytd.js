@@ -20,13 +20,23 @@ export async function onRequestGet(context) {
   const db = env.DB;
 
   try {
-    // 1. Check cache first
-    const cached = await db
-      .prepare(`SELECT ytd_price FROM quote_cache WHERE symbol = ?1`)
-      .bind(symbol)
-      .first();
+    const currentYear = new Date().getFullYear();
 
-    if (cached && cached.ytd_price !== null && cached.ytd_price !== undefined) {
+    // 1. Check cache first
+    let cached = null;
+    try {
+      cached = await db
+        .prepare(`SELECT ytd_price, ytd_year FROM quote_cache WHERE symbol = ?1`)
+        .bind(symbol)
+        .first();
+    } catch {
+      cached = await db
+        .prepare(`SELECT ytd_price FROM quote_cache WHERE symbol = ?1`)
+        .bind(symbol)
+        .first();
+    }
+
+    if (cached && cached.ytd_price !== null && cached.ytd_price !== undefined && (cached.ytd_year == null || cached.ytd_year === currentYear)) {
       return Response.json(
         { success: true, data: { symbol, ytdPrice: cached.ytd_price, cached: true } },
         { headers: { 'Cache-Control': 'public, max-age=86400' } }
@@ -66,15 +76,28 @@ export async function onRequestGet(context) {
     const ytdPrice = result.meta.chartPreviousClose;
 
     // 3. Upsert cache
-    await db
-      .prepare(
-        `INSERT INTO quote_cache (symbol, ytd_price, updated_at)
-         VALUES (?1, ?2, datetime('now'))
-         ON CONFLICT(symbol) DO UPDATE SET
-           ytd_price  = excluded.ytd_price`
-      )
-      .bind(symbol, ytdPrice)
-      .run();
+    try {
+      await db
+        .prepare(
+          `INSERT INTO quote_cache (symbol, ytd_price, ytd_year, updated_at)
+           VALUES (?1, ?2, ?3, datetime('now'))
+           ON CONFLICT(symbol) DO UPDATE SET
+             ytd_price = excluded.ytd_price,
+             ytd_year  = excluded.ytd_year`
+        )
+        .bind(symbol, ytdPrice, currentYear)
+        .run();
+    } catch {
+      await db
+        .prepare(
+          `INSERT INTO quote_cache (symbol, ytd_price, updated_at)
+           VALUES (?1, ?2, datetime('now'))
+           ON CONFLICT(symbol) DO UPDATE SET
+             ytd_price  = excluded.ytd_price`
+        )
+        .bind(symbol, ytdPrice)
+        .run();
+    }
 
     return Response.json(
       { success: true, data: { symbol, ytdPrice, cached: false } },

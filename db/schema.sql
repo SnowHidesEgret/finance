@@ -77,6 +77,10 @@ CREATE TABLE IF NOT EXISTS quote_cache (
   volume         INTEGER,
   prev_close     REAL,
   currency       TEXT,
+  ytd_price      REAL,
+  mtd_price      REAL,
+  mtd_month      TEXT,
+  ytd_year       INTEGER,
   updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

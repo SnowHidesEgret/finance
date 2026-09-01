@@ -246,36 +246,43 @@ async function fetchMtdPrice(yfSymbol) {
   }
 }
 
+  // Current natural month & year keys for cache validation
+  const nowForKeys = new Date();
+  const currentMonthKey = `${nowForKeys.getFullYear()}-${String(nowForKeys.getMonth() + 1).padStart(2, '0')}`;
+  const currentYearNum = nowForKeys.getFullYear();
+  const currentMonthStartStr = `${currentMonthKey}-01`;
+
   // ── 3. Fetch live quotes, YTD & MTD prices in parallel ────────────
   // Deduplicate symbols
   const uniqueSymbols = [...new Set(positions.map(p => p.symbol))];
   
-  // Pre-load ytd_price & mtd_price from cache
+  // Pre-load ytd_price & mtd_price from cache (validating against current year/month)
   let cachedYtdMap = new Map();
   let cachedMtdMap = new Map();
   if (uniqueSymbols.length > 0) {
     const symbolsList = uniqueSymbols.map(s => `'${s}'`).join(',');
     try {
       const { results: cachedQuotes } = await env.DB.prepare(
-        `SELECT symbol, ytd_price, mtd_price FROM quote_cache WHERE symbol IN (${symbolsList})`
+        `SELECT symbol, ytd_price, mtd_price, mtd_month, ytd_year FROM quote_cache WHERE symbol IN (${symbolsList})`
       ).all();
       for (const row of cachedQuotes || []) {
-        if (row.ytd_price != null) cachedYtdMap.set(row.symbol, row.ytd_price);
-        if (row.mtd_price != null) cachedMtdMap.set(row.symbol, row.mtd_price);
+        if (row.ytd_price != null && row.ytd_year === currentYearNum) {
+          cachedYtdMap.set(row.symbol, row.ytd_price);
+        }
+        if (row.mtd_price != null && row.mtd_month === currentMonthKey) {
+          cachedMtdMap.set(row.symbol, row.mtd_price);
+        }
       }
     } catch (e) {
       console.warn('[summary] Failed to read quote_cache:', e.message);
       // Auto-migrate missing columns if D1 table schema is outdated
-      if (e.message && (e.message.includes('no such column: mtd_price') || e.message.includes('no such column: ytd_price'))) {
+      if (e.message && (e.message.includes('mtd_month') || e.message.includes('ytd_year') || e.message.includes('mtd_price') || e.message.includes('ytd_price'))) {
         try {
-          if (e.message.includes('mtd_price')) {
-            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run();
-            console.log('[summary] Auto-added missing mtd_price column to quote_cache');
-          }
-          if (e.message.includes('ytd_price')) {
-            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run();
-            console.log('[summary] Auto-added missing ytd_price column to quote_cache');
-          }
+          await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_month TEXT").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_year INTEGER").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run().catch(() => {});
+          await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run().catch(() => {});
+          console.log('[summary] Auto-added missing mtd_month/ytd_year columns to quote_cache');
         } catch (alterErr) {
           console.warn('[summary] Failed to auto-migrate quote_cache schema:', alterErr.message);
         }
@@ -312,8 +319,8 @@ async function fetchMtdPrice(yfSymbol) {
       // Also save to quote_cache for other endpoints (fire and forget)
       try {
         await env.DB.prepare(
-          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, currency, updated_at)
-           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, datetime('now'))
+          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, mtd_month, ytd_year, currency, updated_at)
+           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
            ON CONFLICT(symbol) DO UPDATE SET
              price = excluded.price,
              change_amount = excluded.change_amount,
@@ -321,6 +328,8 @@ async function fetchMtdPrice(yfSymbol) {
              prev_close = excluded.prev_close,
              ytd_price = excluded.ytd_price,
              mtd_price = excluded.mtd_price,
+             mtd_month = excluded.mtd_month,
+             ytd_year = excluded.ytd_year,
              currency = excluded.currency,
              updated_at = datetime('now')`,
         ).bind(
@@ -331,21 +340,21 @@ async function fetchMtdPrice(yfSymbol) {
           quote.prevClose,
           ytdPrice,
           mtdPrice,
+          currentMonthKey,
+          currentYearNum,
           quote.currency,
         ).run();
       } catch (e) {
-        if (e.message && (e.message.includes('no such column: mtd_price') || e.message.includes('no such column: ytd_price'))) {
+        if (e.message && (e.message.includes('no such column: mtd_price') || e.message.includes('no such column: ytd_price') || e.message.includes('no such column: mtd_month') || e.message.includes('no such column: ytd_year'))) {
           try {
-            if (e.message.includes('mtd_price')) {
-              await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run();
-            }
-            if (e.message.includes('ytd_price')) {
-              await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run();
-            }
+            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_month TEXT").run().catch(() => {});
+            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_year INTEGER").run().catch(() => {});
+            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run().catch(() => {});
+            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run().catch(() => {});
             // Retry insert once
             await env.DB.prepare(
-              `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, currency, updated_at)
-               VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, datetime('now'))
+              `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, mtd_month, ytd_year, currency, updated_at)
+               VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
                ON CONFLICT(symbol) DO UPDATE SET
                  price = excluded.price,
                  change_amount = excluded.change_amount,
@@ -353,6 +362,8 @@ async function fetchMtdPrice(yfSymbol) {
                  prev_close = excluded.prev_close,
                  ytd_price = excluded.ytd_price,
                  mtd_price = excluded.mtd_price,
+                 mtd_month = excluded.mtd_month,
+                 ytd_year = excluded.ytd_year,
                  currency = excluded.currency,
                  updated_at = datetime('now')`,
             ).bind(
@@ -363,6 +374,8 @@ async function fetchMtdPrice(yfSymbol) {
               quote.prevClose,
               ytdPrice,
               mtdPrice,
+              currentMonthKey,
+              currentYearNum,
               quote.currency,
             ).run();
           } catch (retryErr) {
@@ -426,14 +439,13 @@ async function fetchMtdPrice(yfSymbol) {
     const nowMs = Date.now();
     const nowObj = new Date();
     const currentYear = nowObj.getFullYear();
-    const currentMonth = nowObj.getMonth();
-    const monthStartMs = new Date(currentYear, currentMonth, 1).getTime();
+    const currentYearStartStr = `${currentYear}-01-01`;
     
     for (const sell of sellTrades) {
       let sellQty = sell.quantity;
-      const sellDate = new Date(sell.trade_date);
-      const isSellThisYear = (sellDate.getFullYear() === currentYear);
-      const isSellThisMonth = (isSellThisYear && sellDate.getMonth() === currentMonth);
+      const sellYMD = getYYYYMMDD(sell.trade_date);
+      const isSellThisYear = (sellYMD >= currentYearStartStr);
+      const isSellThisMonth = (sellYMD >= currentMonthStartStr);
 
       for (const buy of buyLots) {
         if (sellQty <= 0) break;
@@ -444,9 +456,9 @@ async function fetchMtdPrice(yfSymbol) {
         buy.remaining -= matchedQty;
 
         if (isSellThisYear) {
-           const buyYear = new Date(buy.trade_date).getFullYear();
+           const buyYMD = getYYYYMMDD(buy.trade_date);
            let lotYtdBasePrice = buy.price;
-           if (buyYear < currentYear && ytdPrice && ytdPrice > 0) {
+           if (buyYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) {
              lotYtdBasePrice = ytdPrice;
            }
            const lotYtdBaseNative = matchedQty * lotYtdBasePrice;
@@ -456,11 +468,12 @@ async function fetchMtdPrice(yfSymbol) {
         }
 
         if (isSellThisMonth) {
-           const buyDate = new Date(buy.trade_date);
+           const buyYMD = getYYYYMMDD(buy.trade_date);
            let lotMtdBasePrice = buy.price;
-           if (buyDate.getTime() < monthStartMs) {
+           if (buyYMD < currentMonthStartStr) {
              if (mtdPrice && mtdPrice > 0) lotMtdBasePrice = mtdPrice;
-             else if (buyDate.getFullYear() < currentYear && ytdPrice && ytdPrice > 0) lotMtdBasePrice = ytdPrice;
+             else if (buyYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) lotMtdBasePrice = ytdPrice;
+             else if (prevClose && prevClose > 0) lotMtdBasePrice = prevClose;
            }
            const lotMtdBaseNative = matchedQty * lotMtdBasePrice;
            const lotProceedsNative = matchedQty * sell.price;
@@ -492,10 +505,9 @@ async function fetchMtdPrice(yfSymbol) {
       const lotAnnualizedReturn = lotDays > 0 ? (lotPnlPercent / lotDays) * 365 : 0;
       
       // Lot YTD calculation
-      const lotDate = new Date(lot.trade_date);
-      const lotYear = lotDate.getFullYear();
+      const lotYMD = getYYYYMMDD(lot.trade_date);
       let lotYtdBasePrice = lot.price; // default to purchase price if bought this year
-      if (lotYear < currentYear && ytdPrice && ytdPrice > 0) {
+      if (lotYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) {
         lotYtdBasePrice = ytdPrice; // use last year close if bought before this year
       }
       
@@ -507,11 +519,13 @@ async function fetchMtdPrice(yfSymbol) {
 
       // Lot MTD calculation (自然月基准)
       let lotMtdBasePrice = lot.price; // default to purchase price if bought in current month
-      if (lotDate.getTime() < monthStartMs) {
+      if (lotYMD < currentMonthStartStr) {
         if (mtdPrice && mtdPrice > 0) {
           lotMtdBasePrice = mtdPrice;
-        } else if (lotYear < currentYear && ytdPrice && ytdPrice > 0) {
+        } else if (lotYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) {
           lotMtdBasePrice = ytdPrice;
+        } else if (prevClose && prevClose > 0) {
+          lotMtdBasePrice = prevClose;
         }
       }
 
