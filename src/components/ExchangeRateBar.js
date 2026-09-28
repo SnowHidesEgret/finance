@@ -57,7 +57,7 @@ async function updateRates(force = false) {
     
     const [rates, quotes] = await Promise.all([
       getFormattedRates(),
-      getQuotes(['DX-Y.NYB']).catch(() => new Map()) // 即使获取失败也不影响主体汇率显示
+      getQuotes(['DX-Y.NYB', '^TNX'], force).catch(() => new Map()) // 即使获取失败也不影响主体汇率显示
     ]);
     
     const dxyQuote = quotes.get('DX-Y.NYB');
@@ -75,14 +75,34 @@ async function updateRates(force = false) {
       });
     }
 
+    const tnxQuote = quotes.get('^TNX');
+    if (tnxQuote && tnxQuote.price !== null && tnxQuote.price !== undefined) {
+      const yieldRate = tnxQuote.price > 20 ? tnxQuote.price / 10 : tnxQuote.price;
+      rates.push({
+        pair: '10年期美债',
+        rate: yieldRate,
+        formattedValue: `${yieldRate.toFixed(2)}%`,
+        display: `10年期美债 ${yieldRate.toFixed(2)}%`
+      });
+    } else {
+      rates.push({
+        pair: '10年期美债',
+        rate: null,
+        formattedValue: '----',
+        display: '10年期美债 ----'
+      });
+    }
+
     const display = document.getElementById('rate-display');
     const timeEl = document.getElementById('rate-time');
     
     if (display) {
       display.innerHTML = rates.map(r => {
-        const val = (r.rate === null || r.rate === undefined)
-          ? '----'
-          : r.rate.toFixed(r.pair === '美元指数' ? 2 : 4);
+        const val = r.formattedValue
+          ? r.formattedValue
+          : (r.rate === null || r.rate === undefined)
+            ? '----'
+            : r.rate.toFixed(r.pair === '美元指数' ? 2 : 4);
         return `
           <span class="exchange-rate-bar__item">
             <span class="exchange-rate-bar__pair">${r.pair}</span>

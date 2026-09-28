@@ -92,9 +92,9 @@ export async function onRequestGet(context) {
   let quote = null;
 
   try {
-    const isSinaSymbol = symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX');
+    const isSinaSymbol = symbol.endsWith('.SS') || symbol.endsWith('.SZ') || symbol.endsWith('.SHH') || symbol.endsWith('.SHZ') || (symbol.startsWith('^') && symbol !== '^VIX' && symbol !== '^TNX');
 
-    // A) Yahoo Finance (Prioritized for ordinary stocks, crypto, forex, commodities, and VIX)
+    // A) Yahoo Finance (Prioritized for ordinary stocks, crypto, forex, commodities, VIX, and TNX)
     if (!isSinaSymbol) {
       try {
         function translateSymbol(sym) {
