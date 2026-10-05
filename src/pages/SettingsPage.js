@@ -20,7 +20,7 @@ export async function renderSettingsPage(container) {
     console.error('[Settings] Failed to fetch API settings:', err);
   }
   try {
-    apiKeyStatus = await get('/api/openclaw/apikey');
+    apiKeyStatus = await get('/api/settings/apikey');
   } catch (err) {
     console.error('[Settings] Failed to fetch API Key status:', err);
   }
@@ -127,9 +127,9 @@ export async function renderSettingsPage(container) {
       </div>
 
       <div class="card" style="max-width: 600px; margin-top: 24px;">
-        <h3 style="margin-bottom:24px; font-size:1.1rem; border-bottom:1px solid var(--color-border); padding-bottom:12px;">🔑 OpenClaw API 密钥</h3>
+        <h3 style="margin-bottom:24px; font-size:1.1rem; border-bottom:1px solid var(--color-border); padding-bottom:12px;">🔑 Agent API 密钥</h3>
         <p style="font-size:0.875rem; color:var(--color-text-secondary); margin-bottom:16px;">
-          为外部 AI 智能体（如 OpenClaw）生成专用 API Key，用于安全访问您的投资数据。密钥仅在生成时显示一次，请妥善保管。
+          为外部 AI 智能体生成专用 API Key，用于安全访问您的投资数据。密钥仅在生成时显示一次，请妥善保管。
         </p>
 
         <div id="apikey-status" style="margin-bottom:16px; padding:12px 16px; background:rgba(255,255,255,0.04); border-radius:8px; border:1px solid var(--color-border);">
@@ -165,11 +165,13 @@ export async function renderSettingsPage(container) {
           <p style="font-size:0.75rem; color:var(--color-text-muted); margin-bottom:6px; font-weight:600;">📡 API 使用方式</p>
           <code style="font-size:0.7rem; color:var(--color-text-secondary); display:block; font-family:monospace; line-height:1.8;">
             curl -H "Authorization: Bearer sk-xxxxx" \\<br>
-            &nbsp;&nbsp;${window.location.origin}/api/openclaw/portfolio
+            &nbsp;&nbsp;${window.location.origin}/api/agent/portfolio<br>
+            <span style="color:var(--color-text-muted);"># 或使用 sv 命令行工具：</span><br>
+            export STOCKVAULT_API_KEY=sk-xxxxx && npx stockvault-cli portfolio
           </code>
           <div style="border-top: 1px dashed var(--color-border); padding-top: 8px; margin-top: 8px;">
             <a href="/SKILL.md" download="SKILL.md" style="font-size:0.75rem; color:var(--color-accent); text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight: 500; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
-              💾 下载 OpenClaw SKILL.md 技能配置文件
+              💾 下载 Agent SKILL.md 技能配置文件
             </a>
           </div>
         </div>
@@ -301,7 +303,7 @@ export async function renderSettingsPage(container) {
     });
   }
 
-  // ── OpenClaw API Key management ─────────────────────────────────────
+  // ── Agent API Key management ─────────────────────────────────────
   const generateBtn = document.getElementById('apikey-generate-btn');
   if (generateBtn) {
     generateBtn.addEventListener('click', async () => {
@@ -318,7 +320,7 @@ export async function renderSettingsPage(container) {
         generateBtn.textContent = '生成中...';
         msgEl.style.display = 'none';
 
-        const result = await post('/api/openclaw/apikey', {});
+        const result = await post('/api/settings/apikey', {});
         valueEl.textContent = result.apiKey;
         resultEl.style.display = 'block';
 
@@ -365,7 +367,7 @@ export async function renderSettingsPage(container) {
       try {
         revokeBtn.disabled = true;
         revokeBtn.textContent = '撤销中...';
-        await del('/api/openclaw/apikey');
+        await del('/api/settings/apikey');
 
         msgEl.style.color = '#10b981';
         msgEl.textContent = 'API Key 已成功撤销';
