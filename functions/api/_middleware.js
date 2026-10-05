@@ -111,12 +111,11 @@ async function verifyApiKey(db, apiKey) {
 
 /**
  * Verify Authorization token (session or API Key).
- * 
+ *
  * Auth routing logic:
  *  - /api/auth/login          → bypass (no auth needed)
- *  - /api/openclaw/apikey     → session token auth (manage keys via UI)
- *  - /api/openclaw/*          → API Key auth (for external agents)
- *  - everything else          → session token auth
+ *  - /api/agent/*             → API Key auth (for external agents; Authorization header only)
+ *  - everything else          → session token auth (includes /api/settings/apikey)
  *
  * @param {EventContext} context
  */
@@ -129,25 +128,21 @@ async function authHandler({ request, env, next }) {
     return next();
   }
 
-  const isOpenClawRoute = pathname.startsWith('/api/openclaw/');
-  const isApiKeyMgmt = pathname === '/api/openclaw/apikey';
+  const isAgentRoute = pathname.startsWith('/api/agent/');
 
-  // ── OpenClaw data routes → API Key auth ──────────────────────────
-  if (isOpenClawRoute && !isApiKeyMgmt) {
-    // Extract API Key from Authorization header or query param
+  // ── Agent API routes → API Key auth (Authorization header only) ────
+  if (isAgentRoute) {
     const authHeader = request.headers.get('Authorization') || '';
     let apiKey = '';
 
     if (authHeader.toLowerCase().startsWith('bearer sk-')) {
       apiKey = authHeader.replace(/^Bearer\s+/i, '').trim();
-    } else {
-      apiKey = url.searchParams.get('api_key') || '';
     }
 
     if (!apiKey) {
       return jsonResponse({
         success: false,
-        error: { code: 'MISSING_API_KEY', message: '缺少 API Key，请在请求头或查询参数中提供' },
+        error: { code: 'MISSING_API_KEY', message: '缺少 API Key，请在 Authorization 请求头中提供（不支持查询参数）' },
       }, 401);
     }
 
@@ -155,14 +150,14 @@ async function authHandler({ request, env, next }) {
     if (!valid) {
       return jsonResponse({
         success: false,
-        error: { code: 'INVALID_API_KEY', message: '提供的 API Key 无效或已过期' },
+        error: { code: 'INVALID_API_KEY', message: '提供的 API Key 无效，或已在设置页被重新生成/撤销' },
       }, 401);
     }
 
     return next();
   }
 
-  // ── All other routes (including /api/openclaw/apikey) → session token ─
+  // ── All other routes → session token ───────────────────────────────
   const authHeader = request.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 

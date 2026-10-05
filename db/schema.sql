@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
   total_value_cny  REAL NOT NULL DEFAULT 0,
   total_cost_cny   REAL NOT NULL DEFAULT 0,
   total_pnl_cny    REAL NOT NULL DEFAULT 0,
+  ytd_pnl_cny      REAL,                                -- YTD profit/loss in CNY (from latest ALL-market snapshot; NULL if no snapshot yet)
   position_count   INTEGER NOT NULL DEFAULT 0,
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (snapshot_date, market)

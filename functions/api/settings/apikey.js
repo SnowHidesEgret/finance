@@ -1,14 +1,15 @@
 /**
- * @fileoverview OpenClaw API Key management.
+ * @fileoverview Agent API Key management.
  *
  * Routes:
- *   GET    /api/openclaw/apikey  — check if an API key is configured
- *   POST   /api/openclaw/apikey  — generate a new API key (returns plaintext once)
- *   DELETE /api/openclaw/apikey  — revoke the current API key
+ *   GET    /api/settings/apikey  — check if an API key is configured
+ *   POST   /api/settings/apikey  — generate a new API key (returns plaintext once)
+ *   DELETE /api/settings/apikey  — revoke the current API key
  *
  * Authentication: session-token (handled by the global _middleware.js authHandler).
  * The API key managed here is a *separate* credential used by external
- * tools (e.g. MCP clients) to call the read-only OpenClaw endpoints.
+ * tools (e.g. the `sv` CLI, AI agents) to call the read-only Agent API
+ * endpoints under /api/agent/*.
  */
 
 // ────────────────────────────────────────────────────────────
@@ -16,7 +17,7 @@
 // ────────────────────────────────────────────────────────────
 
 /**
- * Build a standard OpenClaw JSON response with `meta` envelope.
+ * Build a standard Agent API JSON response with `meta` envelope.
  * @param {object}  data       — response payload
  * @param {number}  [status=200]
  * @returns {Response}
@@ -66,11 +67,11 @@ async function sha256(text) {
 }
 
 // ────────────────────────────────────────────────────────────
-// GET /api/openclaw/apikey
+// GET /api/settings/apikey
 // ────────────────────────────────────────────────────────────
 
 /**
- * Check whether an OpenClaw API Key has been configured.
+ * Check whether an Agent API Key has been configured.
  * @param {EventContext} context
  */
 export async function onRequestGet({ env }) {
@@ -96,7 +97,7 @@ export async function onRequestGet({ env }) {
 }
 
 // ────────────────────────────────────────────────────────────
-// POST /api/openclaw/apikey
+// POST /api/settings/apikey
 // ────────────────────────────────────────────────────────────
 
 /**
@@ -130,7 +131,7 @@ export async function onRequestPost({ env }) {
 }
 
 // ────────────────────────────────────────────────────────────
-// DELETE /api/openclaw/apikey
+// DELETE /api/settings/apikey
 // ────────────────────────────────────────────────────────────
 
 /**
