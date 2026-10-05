@@ -29,6 +29,22 @@ StockVault 是一个专为全球投资者打造的现代化股票持仓管理与
 
 ## 📅 版本更新日志
 
+### v3.0.0 (2026-10-05)
+
+#### ⚠️ 破坏性变更（Breaking Change）
+- **🗑️ 旧 `/api/openclaw/*` 接口整组移除**：v2.5.0 引入的 OpenClaw 专属 API 已全部下线，不再可用。
+- **🔑 API Key 轮换**：旧 Key 已失效，请在「系统设置 → Agent API 密钥」重新生成。
+
+#### 🤖 全新 Agent API（`/api/agent/*`）
+- 11 个只读端点：`ping`、`portfolio`、`positions`、`position/:symbol`、`trades`、`markets`、`snapshots`、`quotes`（批量）、`performance`、`search`、`fx`
+- 只接受 `Authorization: Bearer <API_KEY>` 鉴权，不再支持 `?api_key=` 查询参数
+- 快照日期统一 UTC；外币成本按实时汇率折算（与仪表盘一致）；币种由 `market` 推导
+
+#### 💻 StockVault CLI（`sv`）
+- Node 单文件零依赖命令行工具（Node ≥ 22），已发布到 npm：`npm i -g stockvault-cli`
+- 14 个命令：`portfolio`、`positions`、`position`、`trades`、`quote`、`markets`、`snapshots`、`performance`、`search`、`fx`、`doctor`、`config`、`version`、`describe`
+- 默认 JSON 输出，`--human` 输出中文表格；Key 只从环境变量/配置文件读取
+
 ### v2.6.0 (2026-08-12)
 
 #### 📊 各国市场概览动态「本月收益」集成
