@@ -8,6 +8,14 @@
  * - Computes PnL in CNY using live rates
  */
 
+import {
+  computePortfolioPerformance,
+  marketCurrency,
+  round2,
+  getYYYYMMDD,
+  getMarketTodayYMD,
+} from '../../../lib/agent-common.js';
+
 /** Translate legacy Alpha Vantage symbol suffixes → Yahoo Finance format */
 function toYahooSymbol(sym) {
   const s = (sym || '').toUpperCase();
@@ -16,50 +24,6 @@ function toYahooSymbol(sym) {
   if (s.endsWith('.SHZ')) return s.replace('.SHZ', '.SZ');
   if (s.endsWith('.SWX')) return s.replace('.SWX', '.SW');
   return s;
-}
-
-/** Get the currency for a given market */
-function marketCurrency(market) {
-  switch (market) {
-    case 'US':      return 'USD';
-    case 'HK':      return 'HKD';
-    case 'SWISS':   return 'CHF';
-    case 'A_SHARE': return 'CNY';
-    default:        return 'CNY';
-  }
-}
-
-/** Round to 2 decimal places. */
-function round2(n) {
-  return Math.round(n * 100) / 100;
-}
-
-/** Standardize date string to YYYY-MM-DD for date comparison */
-function getYYYYMMDD(dateVal) {
-  if (!dateVal) return '';
-  if (typeof dateVal === 'string') {
-    const match = dateVal.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
-    if (match) {
-      return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
-    }
-  }
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-
-/** Get today's YYYY-MM-DD date formatted in the market's local timezone */
-function getMarketTodayYMD(market = 'A_SHARE', now = new Date()) {
-  let timeZone = 'Asia/Shanghai';
-  if (market === 'US') timeZone = 'America/New_York';
-  else if (market === 'SWISS') timeZone = 'Europe/Zurich';
-  try {
-    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
-    return fmt.format(now);
-  } catch {
-    return getYYYYMMDD(now);
-  }
 }
 
 /**
@@ -388,339 +352,29 @@ async function fetchMtdPrice(yfSymbol) {
     }
   }
 
-  // ── 4. Compute portfolio summary ────────────────────────────────────
-  let totalValueCNY = 0;
-  let totalCostCNY  = 0;
-  let totalDayPnL   = 0;
-  let portfolioYtdPnlCNY = 0;
-  let portfolioMtdPnlCNY = 0;
-
-  const marketBreakdown = {};
-  const positionDetails = [];
-
-  for (const p of positions) {
-    // Always derive currency from market — DB currency field may be wrong on old records
-    const currency = marketCurrency(p.market);
-    const rateToCNY = currency === 'CNY' ? 1 : (rates[currency] ? 1 / rates[currency] : 1);
-
-    const liveQuote   = quoteMap.get(p.symbol?.toUpperCase());
-    const currentPrice = liveQuote?.price ?? p.open_price;
-    const prevClose    = liveQuote?.prevClose ?? p.open_price;
-    const ytdPrice     = liveQuote?.ytdPrice; // Dec 31 of last year
-    const mtdPrice     = liveQuote?.mtdPrice; // Last trading day of previous month
-    const hasLivePrice = !!liveQuote;
-
-    // Cost in original currency (open_price is in the position's own currency)
-    const costOriginal   = p.open_price * p.quantity + (p.commission ?? 0);
-    const costCNY        = round2(costOriginal * rateToCNY);
-
-    // Market value in CNY using live price + live exchange rate
-    const valueOriginal  = currentPrice * p.quantity;
-    const valueCNY       = round2(valueOriginal * rateToCNY);
-
-    const pnlCNY         = round2(valueCNY - costCNY);
-    const pnlPercent     = costCNY !== 0 ? round2((pnlCNY / costCNY) * 100) : 0;
-    
-    // Lot-level calculation & Realized YTD/MTD from partial/full sales
-    const pTrades = tradesByPosition[p.id] || [];
-    const buyTrades = [];
-    const sellTrades = [];
-    for (const t of pTrades) {
-      if (t.trade_type === 'SELL') sellTrades.push(t);
-      else if (t.trade_type === 'BUY') buyTrades.push(t);
-    }
-    
-    const buyLots = buyTrades.map(t => ({ ...t, remaining: t.quantity }));
-    let realizedYtdPnlNative = 0;
-    let realizedYtdBaseNative = 0;
-    let realizedMtdPnlNative = 0;
-    let realizedMtdBaseNative = 0;
-    
-    const nowMs = Date.now();
-    const nowObj = new Date();
-    const currentYear = nowObj.getFullYear();
-    const currentYearStartStr = `${currentYear}-01-01`;
-    
-    for (const sell of sellTrades) {
-      let sellQty = sell.quantity;
-      const sellYMD = getYYYYMMDD(sell.trade_date);
-      const isSellThisYear = (sellYMD >= currentYearStartStr);
-      const isSellThisMonth = (sellYMD >= currentMonthStartStr);
-
-      for (const buy of buyLots) {
-        if (sellQty <= 0) break;
-        if (buy.remaining <= 0) continue;
-
-        const matchedQty = Math.min(sellQty, buy.remaining);
-        sellQty -= matchedQty;
-        buy.remaining -= matchedQty;
-
-        if (isSellThisYear) {
-           const buyYMD = getYYYYMMDD(buy.trade_date);
-           let lotYtdBasePrice = buy.price;
-           if (buyYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) {
-             lotYtdBasePrice = ytdPrice;
-           }
-           const lotYtdBaseNative = matchedQty * lotYtdBasePrice;
-           const lotProceedsNative = matchedQty * sell.price;
-           realizedYtdPnlNative += (lotProceedsNative - lotYtdBaseNative);
-           realizedYtdBaseNative += lotYtdBaseNative;
-        }
-
-        if (isSellThisMonth) {
-           const buyYMD = getYYYYMMDD(buy.trade_date);
-           let lotMtdBasePrice = buy.price;
-           if (buyYMD < currentMonthStartStr) {
-             if (mtdPrice && mtdPrice > 0) lotMtdBasePrice = mtdPrice;
-             else if (buyYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) lotMtdBasePrice = ytdPrice;
-             else if (prevClose && prevClose > 0) lotMtdBasePrice = prevClose;
-           }
-           const lotMtdBaseNative = matchedQty * lotMtdBasePrice;
-           const lotProceedsNative = matchedQty * sell.price;
-           realizedMtdPnlNative += (lotProceedsNative - lotMtdBaseNative);
-           realizedMtdBaseNative += lotMtdBaseNative;
-        }
-      }
-    }
-    
-    const activeLots = buyLots.filter(b => b.remaining > 0).map(b => ({ ...b, activeQuantity: b.remaining }));
-    
-    let weightedHoldingDays = 0;
-    let lotTotalCostCNY = 0;
-    const processedLots = [];
-    
-    let totalYtdPnLNative = 0;
-    let totalYtdBaseNative = 0;
-    let totalMtdPnLNative = 0;
-    let totalMtdBaseNative = 0;
-    
-    for (const lot of activeLots) {
-      const lotDays = Math.max(1, Math.floor((nowMs - new Date(lot.trade_date).getTime()) / (1000 * 60 * 60 * 24)));
-      const lotCostNative = lot.activeQuantity * lot.price;
-      const lotCostCNYValue = lotCostNative * (lot.rate_to_cny || rateToCNY || 1);
-      
-      const lotValueNative = lot.activeQuantity * currentPrice;
-      const lotPnLNative = lotValueNative - lotCostNative;
-      const lotPnlPercent = lotCostNative > 0 ? (lotPnLNative / lotCostNative) * 100 : 0;
-      const lotAnnualizedReturn = lotDays > 0 ? (lotPnlPercent / lotDays) * 365 : 0;
-      
-      // Lot YTD calculation
-      const lotYMD = getYYYYMMDD(lot.trade_date);
-      let lotYtdBasePrice = lot.price; // default to purchase price if bought this year
-      if (lotYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) {
-        lotYtdBasePrice = ytdPrice; // use last year close if bought before this year
-      }
-      
-      const lotYtdBaseNative = lot.activeQuantity * lotYtdBasePrice;
-      const lotYtdPnLNative = lotValueNative - lotYtdBaseNative;
-      
-      totalYtdBaseNative += lotYtdBaseNative;
-      totalYtdPnLNative += lotYtdPnLNative;
-
-      // Lot MTD calculation (自然月基准)
-      let lotMtdBasePrice = lot.price; // default to purchase price if bought in current month
-      if (lotYMD < currentMonthStartStr) {
-        if (mtdPrice && mtdPrice > 0) {
-          lotMtdBasePrice = mtdPrice;
-        } else if (lotYMD < currentYearStartStr && ytdPrice && ytdPrice > 0) {
-          lotMtdBasePrice = ytdPrice;
-        } else if (prevClose && prevClose > 0) {
-          lotMtdBasePrice = prevClose;
-        }
-      }
-
-      const lotMtdBaseNative = lot.activeQuantity * lotMtdBasePrice;
-      const lotMtdPnLNative = lotValueNative - lotMtdBaseNative;
-
-      totalMtdBaseNative += lotMtdBaseNative;
-      totalMtdPnLNative += lotMtdPnLNative;
-      
-      processedLots.push({
-        ...lot,
-        holdingDays: lotDays,
-        costNative: round2(lotCostNative),
-        valueNative: round2(lotValueNative),
-        pnlNative: round2(lotPnLNative),
-        pnlPercent: round2(lotPnlPercent),
-        annualizedReturn: round2(lotAnnualizedReturn),
-        ytdPercent: lotYtdBaseNative > 0 ? round2((lotYtdPnLNative / lotYtdBaseNative) * 100) : 0,
-        mtdPercent: lotMtdBaseNative > 0 ? round2((lotMtdPnLNative / lotMtdBaseNative) * 100) : 0,
-      });
-      
-      weightedHoldingDays += lotDays * lotCostCNYValue;
-      lotTotalCostCNY += lotCostCNYValue;
-    }
-    
-    const positionYtdBaseNative = totalYtdBaseNative + realizedYtdBaseNative;
-    const positionYtdPnLNative = totalYtdPnLNative + realizedYtdPnlNative;
-    const ytdPercent = positionYtdBaseNative > 0 ? round2((positionYtdPnLNative / positionYtdBaseNative) * 100) : 0;
-    
-    const positionMtdBaseNative = totalMtdBaseNative + realizedMtdBaseNative;
-    const positionMtdPnLNative = totalMtdPnLNative + realizedMtdPnlNative;
-    const mtdPercent = positionMtdBaseNative > 0 ? round2((positionMtdPnLNative / positionMtdBaseNative) * 100) : 0;
-
-    // Find the earliest trade date among ALL buy trades for this continuous position
-    let earliestDate = p.open_date;
-    if (buyTrades.length > 0) {
-      earliestDate = buyTrades[0].trade_date;
-      for (const t of buyTrades) {
-        if (new Date(t.trade_date) < new Date(earliestDate)) {
-          earliestDate = t.trade_date;
-        }
-      }
-    }
-    
-    // Holding days for UI display (from earliest trade date)
-    const displayHoldingDays = Math.max(1, Math.floor((nowMs - new Date(earliestDate).getTime()) / (1000 * 60 * 60 * 24)));
-    const avgHoldingDays = lotTotalCostCNY > 0 ? Math.max(1, Math.round(weightedHoldingDays / lotTotalCostCNY)) : displayHoldingDays;
-
-    // Return rates (using avgHoldingDays)
-    const holdingDays = displayHoldingDays;
-    const annualizedReturn = round2((pnlPercent / avgHoldingDays) * 365);
-    const monthlyReturn    = mtdPercent;
-
-    // Day PnL
-    // For stocks/lots bought on or after the quote date (or today in market timezone), use purchase price as baseline price
-    const effectiveQuoteDate = liveQuote?.marketDate || getMarketTodayYMD(p.market, nowObj);
-    let dayChangeCNY = 0;
-    if (activeLots && activeLots.length > 0) {
-      let totalDayPnLNative = 0;
-      for (const lot of activeLots) {
-        const lotTradeYMD = getYYYYMMDD(lot.trade_date);
-        const isLotBoughtToday = lotTradeYMD && lotTradeYMD >= effectiveQuoteDate;
-        const basePrice = isLotBoughtToday ? lot.price : prevClose;
-        totalDayPnLNative += (currentPrice - basePrice) * lot.activeQuantity;
-      }
-      dayChangeCNY = round2(totalDayPnLNative * rateToCNY);
-    } else {
-      const posOpenYMD = getYYYYMMDD(p.open_date);
-      const isPositionBoughtToday = posOpenYMD && posOpenYMD >= effectiveQuoteDate;
-      const basePrice = isPositionBoughtToday ? p.open_price : prevClose;
-      dayChangeCNY = round2((currentPrice - basePrice) * p.quantity * rateToCNY);
-    }
-
-
-
-    // Accumulate YTD & MTD PnL in CNY (includes both active and realized)
-    const posYtdPnlCNY = round2(positionYtdPnLNative * rateToCNY);
-    const posMtdPnlCNY = round2(positionMtdPnLNative * rateToCNY);
-    portfolioYtdPnlCNY += posYtdPnlCNY;
-    portfolioMtdPnlCNY += posMtdPnlCNY;
-
-    const mkt = p.market;
-    if (!marketBreakdown[mkt]) {
-      marketBreakdown[mkt] = { value: 0, cost: 0, count: 0, pnl: 0, dayPnl: 0, weightedDays: 0, ytdPnl: 0, mtdPnl: 0 };
-    }
-
-    // If position is closed, only add its YTD/MTD to portfolio & market breakdown, skip active metrics
-    if (p.status === 'CLOSED') {
-      marketBreakdown[mkt].ytdPnl += posYtdPnlCNY;
-      marketBreakdown[mkt].mtdPnl += posMtdPnlCNY;
-      continue;
-    }
-
-    totalValueCNY += valueCNY;
-    totalCostCNY  += costCNY;
-    totalDayPnL   += dayChangeCNY;
-    marketBreakdown[mkt].value  += valueCNY;
-    marketBreakdown[mkt].cost   += costCNY;
-    marketBreakdown[mkt].count  += 1;
-    marketBreakdown[mkt].pnl    += pnlCNY;
-    marketBreakdown[mkt].dayPnl += dayChangeCNY;
-    marketBreakdown[mkt].weightedDays += avgHoldingDays * valueCNY;
-    marketBreakdown[mkt].ytdPnl += posYtdPnlCNY;
-    marketBreakdown[mkt].mtdPnl += posMtdPnlCNY;
-
-    positionDetails.push({
-      ...p,
-      currency,
-      currentPrice,
-      prevClose,
-      ytdPrice,
-      ytdPercent,
-      mtdPrice,
-      mtdPercent,
-      rateToCNY,
-      costCNY,
-      marketValueCNY: valueCNY,
-      pnlCNY,
-      pnlPercent,
-      holdingDays, // used for UI display
-      avgHoldingDays, // actual holding days used for math
-      annualizedReturn,
-      monthlyReturn: mtdPercent,
-      dayPnLCNY: dayChangeCNY,
-      ytdPnLCNY: posYtdPnlCNY,
-      mtdPnLCNY: posMtdPnlCNY,
-      hasLivePrice,
-      activeLots: processedLots,
-      weight: 0, // calculated below
-    });
-  }
-
-  // Compute weights
-  for (const pd of positionDetails) {
-    pd.weight = totalValueCNY > 0 ? round2((pd.marketValueCNY / totalValueCNY) * 100) : 0;
-  }
-
-  const totalPnlCNY     = round2(totalValueCNY - totalCostCNY);
-  const totalPnlPercent = totalCostCNY !== 0 ? round2((totalPnlCNY / totalCostCNY) * 100) : 0;
-  portfolioYtdPnlCNY = round2(portfolioYtdPnlCNY);
-  portfolioMtdPnlCNY = round2(portfolioMtdPnlCNY);
-
-  // Portfolio-level weighted average holding days & return rates
-  let totalWeightedDays = 0;
-  for (const pd of positionDetails) {
-    totalWeightedDays += pd.avgHoldingDays * pd.marketValueCNY;
-  }
-  const totalAvgHoldingDays   = totalValueCNY > 0 ? Math.max(1, Math.round(totalWeightedDays / totalValueCNY)) : 1;
-  const totalAnnualizedReturn = round2((totalPnlPercent / totalAvgHoldingDays) * 365);
-  
-  const mtdCapitalBase = round2(totalValueCNY - portfolioMtdPnlCNY);
-  const totalMonthlyReturn = mtdCapitalBase > 0
-    ? round2((portfolioMtdPnlCNY / mtdCapitalBase) * 100)
-    : 0;
-
-  // ── 5. Calculate portfolio YTD % ────────────────────────────────────
-  // 为了解决年中大额加仓导致的 YTD 收益率失真（分子包含新购持仓利润，但分母由于严格倒推而缺少对应本金），
-  // 这里统一使用“YTD 成本基准 (YTD Capital Base)”作为分母。
-  // YTD 成本基准 = 当前总市值 - YTD 绝对收益。
-  // 在数学上，它完全等价于：年初实际资产 + 年内净转入本金。
-  // 这不仅消除了年初快照缺失时的复杂倒推误差，也和下方的分市场 YTD 计算逻辑保持了完美一致。
-  const ytdCapitalBase = round2(totalValueCNY - portfolioYtdPnlCNY);
-
-  const portfolioYtdPercent = ytdCapitalBase > 0
-    ? round2((portfolioYtdPnlCNY / ytdCapitalBase) * 100)
-    : 0;
-
-  // Build per-market stats
-  const markets = {};
-  for (const [mkt, data] of Object.entries(marketBreakdown)) {
-    const mktPnlPct = data.cost !== 0 ? round2((data.pnl / data.cost) * 100) : 0;
-    const mktYearStartValue = data.value - data.ytdPnl;
-    const ytdPercent = mktYearStartValue > 0 ? round2((data.ytdPnl / mktYearStartValue) * 100) : 0;
-    const mktMonthStartValue = data.value - data.mtdPnl;
-    const mtdPercent = mktMonthStartValue > 0 ? round2((data.mtdPnl / mktMonthStartValue) * 100) : 0;
-    const avgDays   = data.value > 0 ? Math.max(1, Math.round(data.weightedDays / data.value)) : 1;
-    markets[mkt] = {
-      totalValue:       round2(data.value),
-      totalCost:        round2(data.cost),
-      totalPnL:         round2(data.pnl),
-      totalValueCNY:    round2(data.value),
-      totalCostCNY:     round2(data.cost),
-      totalPnlCNY:      round2(data.pnl),
-      pnlPercent:       mktPnlPct,
-      avgHoldingDays:   avgDays,
-      annualizedReturn: round2((mktPnlPct / avgDays) * 365),
-      monthlyReturn:    mtdPercent,
-      mtdPercent:       mtdPercent,
-      mtdPnlCNY:        round2(data.mtdPnl),
-      positionCount:    data.count,
-      dayPnL:           round2(data.dayPnl),
-      ytdPnlCNY:        round2(data.ytdPnl),
-      ytdPercent:       ytdPercent,
-    };
-  }
+  // ── 4. Compute portfolio summary (using shared pure function) ───────
+  const {
+    totalValueCNY,
+    totalCostCNY,
+    totalPnlCNY,
+    totalPnlPercent,
+    totalDayPnL,
+    portfolioYtdPnlCNY,
+    portfolioYtdPercent,
+    portfolioMtdPnlCNY,
+    totalMonthlyReturn,
+    totalAvgHoldingDays,
+    totalAnnualizedReturn,
+    marketBreakdown,
+    markets,
+    positionDetails,
+  } = computePortfolioPerformance({
+    positions,
+    tradesByPosition,
+    quoteMap,
+    rates,
+    now: nowForKeys,
+  });
 
   // ── 6. Write daily snapshot (fire and forget) ───────────────────────
   const today = new Date().toISOString().split('T')[0];
