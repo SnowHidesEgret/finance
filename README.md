@@ -41,7 +41,7 @@ StockVault 是一个专为全球投资者打造的现代化股票持仓管理与
 - 快照日期统一 UTC；外币成本按实时汇率折算（与仪表盘一致）；币种由 `market` 推导
 
 #### 💻 StockVault CLI（`sv`）
-- Node 单文件零依赖命令行工具（Node ≥ 22），已发布到 npm：`npm i -g stockvault-cli`
+- Node 单文件零依赖命令行工具（Node ≥ 22），仓库 `cli/` 目录直接可用（`node cli/stockvault.mjs`）
 - 14 个命令：`portfolio`、`positions`、`position`、`trades`、`quote`、`markets`、`snapshots`、`performance`、`search`、`fx`、`doctor`、`config`、`version`、`describe`
 - 默认 JSON 输出，`--human` 输出中文表格；Key 只从环境变量/配置文件读取
 
