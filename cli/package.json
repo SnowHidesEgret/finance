@@ -1,0 +1,25 @@
+{
+  "name": "stockvault-cli",
+  "version": "0.1.0",
+  "description": "StockVault 股票持仓管理与分析系统命令行工具",
+  "type": "module",
+  "bin": {
+    "stockvault": "./stockvault.mjs",
+    "sv": "./stockvault.mjs"
+  },
+  "files": [
+    "stockvault.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "stockvault",
+    "portfolio",
+    "finance",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT"
+}
