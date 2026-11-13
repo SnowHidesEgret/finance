@@ -162,18 +162,20 @@ async function init() {
   // 6. 启动路由
   initRouter();
   
-  // 7. 自动刷新逻辑
-  let refreshTimer = setInterval(() => {
-    window.dispatchEvent(new CustomEvent('stockvault:refresh'));
-  }, settingsStore.get('refreshInterval'));
+  // 7. 自动刷新逻辑（仅在已登录且非登录页时触发）
+  const dispatchAutoRefresh = () => {
+    if (localStorage.getItem('auth_token') && !window.location.hash.startsWith('#/login')) {
+      window.dispatchEvent(new CustomEvent('stockvault:refresh'));
+    }
+  };
+
+  let refreshTimer = setInterval(dispatchAutoRefresh, settingsStore.get('refreshInterval'));
 
   // 监听设置中的刷新时间变化
   settingsStore.on('refreshInterval', (newVal) => {
     clearInterval(refreshTimer);
     if (newVal > 0) {
-      refreshTimer = setInterval(() => {
-        window.dispatchEvent(new CustomEvent('stockvault:refresh'));
-      }, newVal);
+      refreshTimer = setInterval(dispatchAutoRefresh, newVal);
     }
   });
   

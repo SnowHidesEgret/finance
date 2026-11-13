@@ -66,12 +66,14 @@ export async function renderLoginPage(container) {
       btn.disabled = true;
       errorEl.style.display = 'none';
       
-      const data = await post('/api/auth/login', { password });
+      const data = await post('/api/auth/login', { password }, { silent: true });
       if (data && data.token) {
         localStorage.setItem('auth_token', data.token);
+        Toast.clearHistory();
         if (data.isFirstLogin) {
           Toast.success('这是您的首次登录，刚才输入的密码已设置为初始密码。请牢记！');
         }
+        window.dispatchEvent(new CustomEvent('stockvault:auth-success'));
         window.location.hash = '#/';
       }
     } catch (err) {
@@ -79,7 +81,7 @@ export async function renderLoginPage(container) {
       errorEl.style.display = 'block';
       pwdInput.focus();
     } finally {
-      btn.textContent = '进入系统';
+      btn.textContent = '进入宝库';
       btn.disabled = false;
     }
   });

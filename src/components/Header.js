@@ -125,11 +125,14 @@ export function renderHeader(container) {
     setTimeout(() => updateStatus('就绪', false), 3000);
   });
 
-  // Load marquee data
-  loadIndexMarqueeData();
+  // Load marquee data (only when authenticated)
+  if (localStorage.getItem('auth_token')) {
+    loadIndexMarqueeData();
+  }
 
-  // 监听全局刷新事件以更新跑马灯数值
+  // 监听全局刷新与登录成功事件以更新跑马灯数值
   window.addEventListener('stockvault:refresh', loadIndexMarqueeData);
+  window.addEventListener('stockvault:auth-success', loadIndexMarqueeData);
   
   const marqueeWrapper = container.querySelector('#global-marquee-wrapper');
   const marqueeContent = container.querySelector('#index-marquee');
@@ -242,6 +245,7 @@ import { getQuotes } from '../services/stockApi.js';
 import { formatNumber, formatPercent, getPnLClass } from '../utils/format.js';
 
 export async function loadIndexMarqueeData() {
+  if (!localStorage.getItem('auth_token')) return;
   const marquee = document.getElementById('index-marquee');
   if (!marquee) return;
 
@@ -257,7 +261,7 @@ export async function loadIndexMarqueeData() {
 
   try {
     const symbols = INDICES.map(idx => idx.symbol);
-    const quotes = await getQuotes(symbols);
+    const quotes = await getQuotes(symbols, false, { silent: true });
     
     let html = '';
     

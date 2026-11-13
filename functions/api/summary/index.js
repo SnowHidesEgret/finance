@@ -16,6 +16,9 @@ import {
   getMarketTodayYMD,
 } from '../../../lib/agent-common.js';
 
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
 /** Translate legacy Alpha Vantage symbol suffixes → Yahoo Finance format */
 function toYahooSymbol(sym) {
   const s = (sym || '').toUpperCase();
@@ -27,109 +30,48 @@ function toYahooSymbol(sym) {
 }
 
 /**
- * Fetch a single quote from Yahoo Finance chart API.
+ * Fetch a single quote from Yahoo Finance chart API (with query1/query2 fallback).
  * Returns { price, prevClose, currency, marketDate } or null on failure.
  */
 async function fetchYahooQuote(yfSymbol) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=1d`;
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-      },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta || !meta.regularMarketPrice) return null;
+  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
+  for (const host of hosts) {
+    const url = `https://${host}/v8/finance/chart/${encodeURIComponent(yfSymbol)}?region=US&lang=en-US&includePrePost=false&interval=1d&range=1d`;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Accept': 'application/json',
+        },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (!meta || !meta.regularMarketPrice) continue;
 
-    let marketDate = null;
-    if (meta.regularMarketTime) {
-      const tz = meta.exchangeTimezoneName || 'Asia/Shanghai';
-      try {
-        const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
-        marketDate = fmt.format(new Date(meta.regularMarketTime * 1000));
-      } catch {
-        marketDate = new Date(meta.regularMarketTime * 1000).toISOString().slice(0, 10);
+      let marketDate = null;
+      if (meta.regularMarketTime) {
+        const tz = meta.exchangeTimezoneName || 'Asia/Shanghai';
+        try {
+          const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+          marketDate = fmt.format(new Date(meta.regularMarketTime * 1000));
+        } catch {
+          marketDate = new Date(meta.regularMarketTime * 1000).toISOString().slice(0, 10);
+        }
       }
-    }
 
-    return {
-      price:      meta.regularMarketPrice,
-      prevClose:  meta.chartPreviousClose || meta.regularMarketPrice,
-      currency:   meta.currency || '',
-      marketDate: marketDate,
-    };
-  } catch {
-    return null;
+      return {
+        price:      meta.regularMarketPrice,
+        prevClose:  meta.chartPreviousClose || meta.regularMarketPrice,
+        currency:   meta.currency || '',
+        marketDate: marketDate,
+      };
+    } catch {
+      // try next host
+    }
   }
+  return null;
 }
-
-
-/**
- * GET handler — global portfolio summary.
- * @param {EventContext} context
- */
-export async function onRequestGet(context) {
-  const { env } = context;
-
-  // ── 1. Fetch live exchange rates (CNY base) ─────────────────────────
-  // rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }  (1 CNY = X foreign)
-  let rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 };
-  try {
-    const rateRes = await fetch('https://api.frankfurter.dev/v1/latest?base=CNY&symbols=USD,HKD,CHF');
-    if (rateRes.ok) {
-      const rateData = await rateRes.json();
-      if (rateData.rates) rates = { ...rates, ...rateData.rates };
-    }
-  } catch (e) {
-    console.warn('[summary] Exchange rate fetch failed, using fallback:', e.message);
-  }
-
-  // Helper: convert any amount in `currency` to CNY
-  function toCNY(amount, currency) {
-    if (!currency || currency === 'CNY') return amount;
-    const r = rates[currency];
-    return r ? amount / r : amount;
-  }
-
-  // ── 2. Load all open & this year's closed positions from DB ─────────
-  const currentYearStr = new Date().getFullYear().toString();
-  const { results: positions } = await env.DB.prepare(
-    `SELECT * FROM positions 
-     WHERE status = 'OPEN' 
-        OR (status = 'CLOSED' AND close_date >= '${currentYearStr}-01-01')
-     ORDER BY market, open_date DESC`,
-  ).all();
-
-  if (!positions || positions.length === 0) {
-    return Response.json({
-      success: true,
-      data: {
-        totalValueCNY: 0, totalCostCNY: 0, totalPnlCNY: 0,
-        totalPnlPercent: 0, positionCount: 0,
-        marketCounts: {}, markets: {}, marketSummaries: {},
-        positions: [], exchangeRates: rates,
-      },
-    });
-  }
-
-  // Load all trades for active positions to compute lot-level returns
-  const posIds = positions.map(p => `'${p.id}'`).join(',');
-  let allTrades = [];
-  if (posIds) {
-    const { results } = await env.DB.prepare(
-      `SELECT * FROM trades WHERE position_id IN (${posIds}) ORDER BY trade_date ASC, created_at ASC`
-    ).all();
-    allTrades = results || [];
-  }
-  
-  const tradesByPosition = {};
-  for (const t of allTrades) {
-    if (!tradesByPosition[t.position_id]) tradesByPosition[t.position_id] = [];
-    tradesByPosition[t.position_id].push(t);
-  }
 
 /**
  * Fetch YTD price from Yahoo Finance chart API.
@@ -139,7 +81,7 @@ async function fetchYtdPrice(yfSymbol) {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         'Accept': 'application/json',
       },
     });
@@ -162,7 +104,7 @@ async function fetchMtdPrice(yfSymbol) {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': USER_AGENT,
         'Accept': 'application/json',
       },
     });
@@ -210,43 +152,107 @@ async function fetchMtdPrice(yfSymbol) {
   }
 }
 
+/**
+ * GET handler — global portfolio summary.
+ * @param {EventContext} context
+ */
+export async function onRequestGet(context) {
+  const { env } = context;
+
+  // ── 1. Fetch live exchange rates (CNY base) ─────────────────────────
+  // rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }  (1 CNY = X foreign)
+  let rates = { USD: 0.1389, HKD: 1.0833, CHF: 0.1234 };
+  try {
+    const rateRes = await fetch('https://api.frankfurter.dev/v1/latest?base=CNY&symbols=USD,HKD,CHF');
+    if (rateRes.ok) {
+      const rateData = await rateRes.json();
+      if (rateData.rates) rates = { ...rates, ...rateData.rates };
+    }
+  } catch (e) {
+    console.warn('[summary] Exchange rate fetch failed, using fallback:', e.message);
+  }
+
+  // ── 2. Load all open & this year's closed positions from DB ─────────
+  const currentYearStr = new Date().getFullYear().toString();
+  const { results: positions } = await env.DB.prepare(
+    `SELECT * FROM positions 
+     WHERE status = 'OPEN' 
+        OR (status = 'CLOSED' AND close_date >= ?1)
+     ORDER BY market, open_date DESC`,
+  ).bind(`${currentYearStr}-01-01`).all();
+
+  if (!positions || positions.length === 0) {
+    return Response.json({
+      success: true,
+      data: {
+        totalValueCNY: 0, totalCostCNY: 0, totalPnlCNY: 0,
+        totalPnlPercent: 0, positionCount: 0,
+        marketCounts: {}, markets: {}, marketSummaries: {},
+        positions: [], exchangeRates: rates,
+      },
+    });
+  }
+
+  // Load all trades for active positions using parameterized placeholders
+  let allTrades = [];
+  if (positions.length > 0) {
+    const posPlaceholders = positions.map((_, idx) => `?${idx + 1}`).join(',');
+    const { results } = await env.DB.prepare(
+      `SELECT * FROM trades WHERE position_id IN (${posPlaceholders}) ORDER BY trade_date ASC, created_at ASC`
+    ).bind(...positions.map(p => p.id)).all();
+    allTrades = results || [];
+  }
+
+  const tradesByPosition = {};
+  for (const t of allTrades) {
+    if (!tradesByPosition[t.position_id]) tradesByPosition[t.position_id] = [];
+    tradesByPosition[t.position_id].push(t);
+  }
+
   // Current natural month & year keys for cache validation
   const nowForKeys = new Date();
   const currentMonthKey = `${nowForKeys.getFullYear()}-${String(nowForKeys.getMonth() + 1).padStart(2, '0')}`;
   const currentYearNum = nowForKeys.getFullYear();
-  const currentMonthStartStr = `${currentMonthKey}-01`;
 
   // ── 3. Fetch live quotes, YTD & MTD prices in parallel ────────────
-  // Deduplicate symbols
-  const uniqueSymbols = [...new Set(positions.map(p => p.symbol))];
-  
-  // Pre-load ytd_price & mtd_price from cache (validating against current year/month)
-  let cachedYtdMap = new Map();
-  let cachedMtdMap = new Map();
+  const uniqueSymbols = [...new Set(positions.map(p => (p.symbol || '').toUpperCase()).filter(Boolean))];
+
+  // Pre-load quote, ytd_price & mtd_price from cache using parameterized placeholders
+  const cachedYtdMap = new Map();
+  const cachedMtdMap = new Map();
+  const cachedQuoteFallbackMap = new Map();
   if (uniqueSymbols.length > 0) {
-    const symbolsList = uniqueSymbols.map(s => `'${s}'`).join(',');
+    const symPlaceholders = uniqueSymbols.map((_, idx) => `?${idx + 1}`).join(',');
     try {
       const { results: cachedQuotes } = await env.DB.prepare(
-        `SELECT symbol, ytd_price, mtd_price, mtd_month, ytd_year FROM quote_cache WHERE symbol IN (${symbolsList})`
-      ).all();
+        `SELECT symbol, price, prev_close, currency, ytd_price, mtd_price, mtd_month, ytd_year
+         FROM quote_cache WHERE symbol IN (${symPlaceholders})`
+      ).bind(...uniqueSymbols).all();
       for (const row of cachedQuotes || []) {
+        const symUpper = (row.symbol || '').toUpperCase();
+        if (row.price != null) {
+          cachedQuoteFallbackMap.set(symUpper, {
+            price: row.price,
+            prevClose: row.prev_close || row.price,
+            currency: row.currency || '',
+            marketDate: null,
+          });
+        }
         if (row.ytd_price != null && row.ytd_year === currentYearNum) {
-          cachedYtdMap.set(row.symbol, row.ytd_price);
+          cachedYtdMap.set(symUpper, row.ytd_price);
         }
         if (row.mtd_price != null && row.mtd_month === currentMonthKey) {
-          cachedMtdMap.set(row.symbol, row.mtd_price);
+          cachedMtdMap.set(symUpper, row.mtd_price);
         }
       }
     } catch (e) {
       console.warn('[summary] Failed to read quote_cache:', e.message);
-      // Auto-migrate missing columns if D1 table schema is outdated
       if (e.message && (e.message.includes('mtd_month') || e.message.includes('ytd_year') || e.message.includes('mtd_price') || e.message.includes('ytd_price'))) {
         try {
           await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_month TEXT").run().catch(() => {});
           await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_year INTEGER").run().catch(() => {});
           await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run().catch(() => {});
           await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run().catch(() => {});
-          console.log('[summary] Auto-added missing mtd_month/ytd_year columns to quote_cache');
         } catch (alterErr) {
           console.warn('[summary] Failed to auto-migrate quote_cache schema:', alterErr.message);
         }
@@ -258,94 +264,59 @@ async function fetchMtdPrice(yfSymbol) {
     uniqueSymbols.map(async (sym) => {
       const yfSym = toYahooSymbol(sym);
       const quotePromise = fetchYahooQuote(yfSym);
-      let ytdPricePromise = Promise.resolve(cachedYtdMap.get(sym.toUpperCase()));
-      let mtdPricePromise = Promise.resolve(cachedMtdMap.get(sym.toUpperCase()));
-      
-      if (!cachedYtdMap.has(sym.toUpperCase())) {
+      let ytdPricePromise = Promise.resolve(cachedYtdMap.get(sym));
+      let mtdPricePromise = Promise.resolve(cachedMtdMap.get(sym));
+
+      if (!cachedYtdMap.has(sym)) {
         ytdPricePromise = fetchYtdPrice(yfSym);
       }
-      if (!cachedMtdMap.has(sym.toUpperCase())) {
+      if (!cachedMtdMap.has(sym)) {
         mtdPricePromise = fetchMtdPrice(yfSym);
       }
-      
-      const [quote, ytdPrice, mtdPrice] = await Promise.all([quotePromise, ytdPricePromise, mtdPricePromise]);
-      return { sym, yfSym, quote, ytdPrice, mtdPrice };
+
+      const [liveQuote, ytdPrice, mtdPrice] = await Promise.all([quotePromise, ytdPricePromise, mtdPricePromise]);
+      const quote = liveQuote || cachedQuoteFallbackMap.get(sym) || null;
+      return { sym, yfSym, quote, isLive: Boolean(liveQuote), ytdPrice, mtdPrice };
     })
   );
 
   // Build quote map: original_symbol → quote data
   const quoteMap = new Map();
-  for (const { sym, yfSym, quote, ytdPrice, mtdPrice } of quoteResults) {
+  for (const { sym, quote, isLive, ytdPrice, mtdPrice } of quoteResults) {
     if (quote) {
       quote.ytdPrice = ytdPrice;
       quote.mtdPrice = mtdPrice;
-      quoteMap.set(sym.toUpperCase(), quote);
-      // Also save to quote_cache for other endpoints (fire and forget)
-      try {
-        await env.DB.prepare(
-          `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, mtd_month, ytd_year, currency, updated_at)
-           VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
-           ON CONFLICT(symbol) DO UPDATE SET
-             price = excluded.price,
-             change_amount = excluded.change_amount,
-             change_percent = excluded.change_percent,
-             prev_close = excluded.prev_close,
-             ytd_price = excluded.ytd_price,
-             mtd_price = excluded.mtd_price,
-             mtd_month = excluded.mtd_month,
-             ytd_year = excluded.ytd_year,
-             currency = excluded.currency,
-             updated_at = datetime('now')`,
-        ).bind(
-          sym.toUpperCase(),
-          quote.price,
-          round2(quote.price - quote.prevClose),
-          quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
-          quote.prevClose,
-          ytdPrice,
-          mtdPrice,
-          currentMonthKey,
-          currentYearNum,
-          quote.currency,
-        ).run();
-      } catch (e) {
-        if (e.message && (e.message.includes('no such column: mtd_price') || e.message.includes('no such column: ytd_price') || e.message.includes('no such column: mtd_month') || e.message.includes('no such column: ytd_year'))) {
-          try {
-            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_month TEXT").run().catch(() => {});
-            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_year INTEGER").run().catch(() => {});
-            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN mtd_price REAL").run().catch(() => {});
-            await env.DB.prepare("ALTER TABLE quote_cache ADD COLUMN ytd_price REAL").run().catch(() => {});
-            // Retry insert once
-            await env.DB.prepare(
-              `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, mtd_month, ytd_year, currency, updated_at)
-               VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
-               ON CONFLICT(symbol) DO UPDATE SET
-                 price = excluded.price,
-                 change_amount = excluded.change_amount,
-                 change_percent = excluded.change_percent,
-                 prev_close = excluded.prev_close,
-                 ytd_price = excluded.ytd_price,
-                 mtd_price = excluded.mtd_price,
-                 mtd_month = excluded.mtd_month,
-                 ytd_year = excluded.ytd_year,
-                 currency = excluded.currency,
-                 updated_at = datetime('now')`,
-            ).bind(
-              sym.toUpperCase(),
-              quote.price,
-              round2(quote.price - quote.prevClose),
-              quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
-              quote.prevClose,
-              ytdPrice,
-              mtdPrice,
-              currentMonthKey,
-              currentYearNum,
-              quote.currency,
-            ).run();
-          } catch (retryErr) {
-            console.warn('[summary] Failed to update quote_cache after column auto-migration for', sym, retryErr.message);
-          }
-        } else {
+      quoteMap.set(sym, quote);
+      // Save live fetched quotes back to quote_cache
+      if (isLive) {
+        try {
+          await env.DB.prepare(
+            `INSERT INTO quote_cache (symbol, price, change_amount, change_percent, high, low, volume, prev_close, ytd_price, mtd_price, mtd_month, ytd_year, currency, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 0, 0, 0, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))
+             ON CONFLICT(symbol) DO UPDATE SET
+               price = excluded.price,
+               change_amount = excluded.change_amount,
+               change_percent = excluded.change_percent,
+               prev_close = excluded.prev_close,
+               ytd_price = excluded.ytd_price,
+               mtd_price = excluded.mtd_price,
+               mtd_month = excluded.mtd_month,
+               ytd_year = excluded.ytd_year,
+               currency = excluded.currency,
+               updated_at = datetime('now')`,
+          ).bind(
+            sym,
+            quote.price,
+            round2(quote.price - quote.prevClose),
+            quote.prevClose ? round2(((quote.price - quote.prevClose) / quote.prevClose) * 100) : 0,
+            quote.prevClose,
+            ytdPrice,
+            mtdPrice,
+            currentMonthKey,
+            currentYearNum,
+            quote.currency,
+          ).run();
+        } catch (e) {
           console.warn('[summary] Failed to update quote_cache for', sym, e.message);
         }
       }
@@ -376,11 +347,10 @@ async function fetchMtdPrice(yfSymbol) {
     now: nowForKeys,
   });
 
-  // ── 6. Write daily snapshot (fire and forget) ───────────────────────
+  // ── 5. Write daily snapshot ─────────────────────────────────────────
   const today = new Date().toISOString().split('T')[0];
   try {
     const snapshotStmts = [];
-    // Per-market snapshots
     for (const [mkt, data] of Object.entries(marketBreakdown)) {
       snapshotStmts.push(
         env.DB.prepare(
@@ -395,7 +365,6 @@ async function fetchMtdPrice(yfSymbol) {
         ).bind(today, mkt, round2(data.value), round2(data.cost), round2(data.pnl), round2(data.ytdPnl), data.count)
       );
     }
-    // ALL summary snapshot
     snapshotStmts.push(
       env.DB.prepare(
         `INSERT INTO portfolio_snapshots (snapshot_date, market, total_value_cny, total_cost_cny, total_pnl_cny, ytd_pnl_cny, position_count)

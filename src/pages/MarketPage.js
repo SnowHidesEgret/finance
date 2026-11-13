@@ -13,10 +13,12 @@ import { Toast } from '../utils/toast.js';
 
 /** 页面级缓存 */
 let _cachedSummary = null;
+let _cachedSummaryTime = 0;
 let _cachedPositions = [];
 let _cachedFinnhub = null;
 let _currentMarket = 'US';
 let _newsShowCount = 10;
+const MARKET_SUMMARY_TTL_MS = 60 * 1000;
 
 /**
  * 渲染市场专区页面
@@ -78,14 +80,19 @@ async function loadMarketData(container) {
   if (!content) return;
 
   try {
-    // 获取汇总与持仓
-    const [summaryData, allPositions] = await Promise.all([
-      get('/api/summary').catch(() => null),
-      get('/api/positions', { status: 'OPEN' }).catch(() => []),
-    ]);
-
-    _cachedSummary = summaryData;
-    _cachedPositions = summaryData?.positions?.filter(p => p.status === 'OPEN') || (Array.isArray(allPositions) ? allPositions : []);
+    // 优先使用 60 秒内的页面缓存（避免切换市场 Tab 时重复请求 /api/summary）
+    let summaryData = _cachedSummary;
+    if (!summaryData || Date.now() - _cachedSummaryTime > MARKET_SUMMARY_TTL_MS) {
+      summaryData = await get('/api/summary', {}, { silent: true }).catch(() => null);
+      if (summaryData) {
+        _cachedSummary = summaryData;
+        _cachedSummaryTime = Date.now();
+        _cachedPositions = (summaryData.positions || []).filter(p => p.status === 'OPEN' || !p.status);
+      } else {
+        const allPositions = await get('/api/positions', { status: 'OPEN' }).catch(() => []);
+        _cachedPositions = Array.isArray(allPositions) ? allPositions : [];
+      }
+    }
 
     const marketPositions = _cachedPositions
       .filter(p => p.market === _currentMarket)
@@ -171,8 +178,8 @@ function renderOverviewSection(positions, marketSummary) {
         </div>
         <div class="market-page__kpi" style="border-left:1px dashed var(--color-border); padding-left:16px;">
           <div class="market-page__kpi-label" style="display:inline-flex; align-items:center; gap:4px;">
-            整体 Bate
-            <i data-lucide="help-circle" style="width:12px; height:12px; color:var(--color-text-muted);" title="基于各持仓股票的市值权重与个股 Bate 加权计算得出"></i>
+            整体 Beta
+            <i data-lucide="help-circle" style="width:12px; height:12px; color:var(--color-text-muted);" title="基于各持仓股票的市值权重与个股 Beta 加权计算得出"></i>
           </div>
           <div class="market-page__kpi-value" id="portfolio-beta-value" style="color:var(--color-accent);">加载中...</div>
         </div>

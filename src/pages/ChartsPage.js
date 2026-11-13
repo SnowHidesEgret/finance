@@ -66,9 +66,10 @@ export async function renderChartsPage(container) {
     });
   });
 
-  // Load YTD market comparison and PnL scatter
-  loadYtdMarketChart();
-  loadPnlScatter();
+  // Load YTD market comparison and PnL scatter (share a single /api/summary request)
+  const summaryPromise = get('/api/summary', {}, { silent: true });
+  loadYtdMarketChart(summaryPromise);
+  loadPnlScatter(summaryPromise);
 }
 
 /**
@@ -96,12 +97,12 @@ async function loadAssetTrend(days) {
 /**
  * YTD market comparison bar chart
  */
-async function loadYtdMarketChart() {
+async function loadYtdMarketChart(summaryPromise) {
   const container = document.getElementById('chart-ytd-market');
   if (!container) return;
 
   try {
-    const summary = await get('/api/summary');
+    const summary = await (summaryPromise || get('/api/summary', {}, { silent: true }));
     if (!summary?.markets) throw new Error('No market data');
 
     const { default: echarts } = await import('echarts');
@@ -177,12 +178,12 @@ async function loadYtdMarketChart() {
 /**
  * PnL scatter / distribution chart
  */
-async function loadPnlScatter() {
+async function loadPnlScatter(summaryPromise) {
   const container = document.getElementById('chart-pnl-scatter');
   if (!container) return;
 
   try {
-    const summary = await get('/api/summary');
+    const summary = await (summaryPromise || get('/api/summary', {}, { silent: true }));
     if (!summary?.positions || summary.positions.length === 0) throw new Error('No position data');
 
     const { default: echarts } = await import('echarts');

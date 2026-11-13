@@ -10,31 +10,45 @@ const BASE_URL = '';  // Same origin — Pages Functions 在同域下
 /**
  * 通用请求方法
  * @param {string} endpoint - API 端点路径
- * @param {Object} [options] - fetch 配置
+ * @param {Object} [options] - fetch 配置，支持额外属性 { silent?: boolean }
  * @returns {Promise<Object>} 响应数据
  */
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
   const token = localStorage.getItem('auth_token');
-  
+  const { silent = false, headers: customHeaders, ...fetchOptions } = options;
+
   const config = {
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...options.headers
+      ...customHeaders
     },
-    ...options
+    ...fetchOptions
   };
-  
+
   try {
     const response = await fetch(url, config);
-    
+
     if (response.status === 401) {
-      localStorage.removeItem('auth_token');
-      window.location.hash = '#/login';
-      throw new ApiError('未授权，请登录', 401, null);
+      // 仅当当前存储的 token 与本次请求携带的 token 一致时才清除，防止登录前的慢请求冲掉新登录的 token
+      const currentToken = localStorage.getItem('auth_token');
+      if (token && currentToken === token) {
+        localStorage.removeItem('auth_token');
+      }
+      if (!localStorage.getItem('auth_token') && !window.location.hash.startsWith('#/login') && !endpoint.startsWith('/api/auth/login')) {
+        window.location.hash = '#/login';
+      }
+      let errMsg = '未授权，请登录';
+      try {
+        const errBody = await response.json();
+        if (errBody && errBody.error) {
+          errMsg = typeof errBody.error === 'string' ? errBody.error : (errBody.error.message || errMsg);
+        }
+      } catch (_) {}
+      throw new ApiError(errMsg, 401, null);
     }
-    
+
     let data;
     const text = await response.text();
 
@@ -59,8 +73,7 @@ async function request(endpoint, options = {}) {
     } else {
       data = {};
     }
-    
-    
+
     if (!response.ok) {
       throw new ApiError(
         `${ctx} ${data.error || `HTTP ${response.status}`}`,
@@ -68,32 +81,32 @@ async function request(endpoint, options = {}) {
         data
       );
     }
-    
+
     if (data.success === false) {
       throw new ApiError(`${ctx} ${data.error || 'Unknown error'}`, response.status, data);
     }
-    
+
     return data.data !== undefined ? data.data : data;
   } catch (error) {
     if (error instanceof ApiError) {
-      if (error.status !== 401) { // We probably don't want to toast every 401 if it's just redirecting to login, or maybe we do. We will toast it.
+      if (error.status !== 401 && !silent) {
         Toast.error(error.message, `API 请求失败 (${error.status})`);
-      } else {
-        // Toast warning removed to avoid repetitive login expiration alerts
       }
       throw error;
     }
-    
+
     // 网络错误
     console.error(`[API] Request failed: ${endpoint}`, error);
-    
+
     let ctx = `[${endpoint.split('?')[0]}]`;
     const symbolMatch = endpoint.match(/[?&]symbol=([^&]+)/);
     if (symbolMatch) {
       ctx += ` (股票: ${decodeURIComponent(symbolMatch[1])})`;
     }
-    
-    Toast.error(error.message, '网络请求异常');
+
+    if (!silent) {
+      Toast.error(error.message, '网络请求异常');
+    }
     throw new ApiError(`${ctx} 网络错误: ${error.message}`, 0, null);
   }
 }
@@ -114,9 +127,10 @@ export class ApiError extends Error {
  * GET 请求
  * @param {string} endpoint
  * @param {Object} [params] - URL 查询参数
+ * @param {Object} [options] - 附加请求配置 (如 { silent: true })
  * @returns {Promise<Object>}
  */
-export async function get(endpoint, params = {}) {
+export async function get(endpoint, params = {}, options = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value != null && value !== '') {
@@ -125,19 +139,21 @@ export async function get(endpoint, params = {}) {
   }
   const queryStr = query.toString();
   const url = queryStr ? `${endpoint}?${queryStr}` : endpoint;
-  return request(url, { method: 'GET' });
+  return request(url, { method: 'GET', ...options });
 }
 
 /**
  * POST 请求
  * @param {string} endpoint
  * @param {Object} body
+ * @param {Object} [options]
  * @returns {Promise<Object>}
  */
-export async function post(endpoint, body) {
+export async function post(endpoint, body, options = {}) {
   return request(endpoint, {
     method: 'POST',
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    ...options
   });
 }
 
@@ -145,20 +161,23 @@ export async function post(endpoint, body) {
  * PUT 请求
  * @param {string} endpoint
  * @param {Object} body
+ * @param {Object} [options]
  * @returns {Promise<Object>}
  */
-export async function put(endpoint, body) {
+export async function put(endpoint, body, options = {}) {
   return request(endpoint, {
     method: 'PUT',
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    ...options
   });
 }
 
 /**
  * DELETE 请求
  * @param {string} endpoint
+ * @param {Object} [options]
  * @returns {Promise<Object>}
  */
-export async function del(endpoint) {
-  return request(endpoint, { method: 'DELETE' });
+export async function del(endpoint, options = {}) {
+  return request(endpoint, { method: 'DELETE', ...options });
 }

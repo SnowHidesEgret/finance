@@ -87,8 +87,10 @@ async function handleRoute() {
   // 执行前置钩子
   for (const hook of beforeHooks) {
     if (hook(previousPath, path) === false) {
-      // 恢复 hash
-      window.location.hash = '#' + previousPath;
+      // 仅当钩子未主动重定向到新路由且存在历史路由时，才恢复 hash
+      if (parseHash().path === path && previousPath) {
+        window.location.hash = '#' + previousPath;
+      }
       return;
     }
   }

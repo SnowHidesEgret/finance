@@ -110,6 +110,43 @@ async function verifyApiKey(db, apiKey) {
 }
 
 /**
+ * Verify a stateless HMAC session token (`st1.<expiresAt>.<nonce>.<sigHex>`)
+ * against the stored master_password_hash.
+ * @param {string} token
+ * @param {string} secretHash
+ * @returns {Promise<boolean>}
+ */
+async function verifySignedSessionToken(token, secretHash) {
+  if (!token || !secretHash || !token.startsWith('st1.')) return false;
+  const parts = token.split('.');
+  if (parts.length !== 4) return false;
+
+  const expiresAt = Number(parts[1]);
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return false;
+
+  const payload = `${parts[0]}.${parts[1]}.${parts[2]}`;
+  const expectedSigHex = parts[3];
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secretHash),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  const computedSigHex = Array.from(new Uint8Array(sigBuf), (b) => b.toString(16).padStart(2, '0')).join('');
+
+  if (computedSigHex.length !== expectedSigHex.length) return false;
+  let diff = 0;
+  for (let i = 0; i < computedSigHex.length; i++) {
+    diff |= computedSigHex.charCodeAt(i) ^ expectedSigHex.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/**
  * Verify Authorization token (session or API Key).
  *
  * Auth routing logic:
@@ -167,9 +204,24 @@ async function authHandler({ request, env, next }) {
 
   try {
     const db = env.DB;
-    const stmt = await db.prepare("SELECT value FROM user_settings WHERE key = 'auth_token'").first();
+    const { results } = await db.prepare(
+      "SELECT key, value FROM user_settings WHERE key IN ('auth_token', 'master_password_hash')"
+    ).all();
 
-    if (!stmt || stmt.value !== token) {
+    const settingsMap = {};
+    for (const row of results || []) {
+      settingsMap[row.key] = row.value;
+    }
+
+    let isValidSession = false;
+    if (token.startsWith('st1.') && settingsMap.master_password_hash) {
+      isValidSession = await verifySignedSessionToken(token, settingsMap.master_password_hash);
+    } else if (settingsMap.auth_token && settingsMap.auth_token === token) {
+      // Legacy UUID token fallback
+      isValidSession = true;
+    }
+
+    if (!isValidSession) {
       return jsonResponse({ success: false, error: '登录已失效，请重新登录' }, 401);
     }
   } catch (err) {

@@ -241,32 +241,33 @@ export async function renderDashboardPage(container) {
  * 加载仪表盘数据
  */
 async function loadDashboardData(container) {
+  if (!localStorage.getItem('auth_token')) return;
   try {
-    // 并行获取数据
-    const [positions, rates] = await Promise.all([
-      get('/api/positions', { status: 'OPEN' }).catch(() => []),
-      getExchangeRates().catch(() => ({ CNY: 1, USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }))
-    ]);
-    
-    const positionList = Array.isArray(positions) ? positions : [];
-    
-    // 尝试获取行情（可能受 API 限制）
-    let quotes = {};
+    // 优先请求 /api/summary（已包含实时汇率、各市场汇总及所有持仓明细）
     try {
-      const quoteData = await get('/api/summary');
+      const quoteData = await get('/api/summary', {}, { silent: true });
       if (quoteData) {
+        const rates = quoteData.exchangeRates || { CNY: 1, USD: 0.1389, HKD: 1.0833, CHF: 0.1234 };
+        const positionList = quoteData.positions || [];
         cachedMarketSummaries = quoteData.markets || quoteData.marketSummaries || {};
         updateKPICards(quoteData);
         updateMarketOverview(cachedMarketSummaries, quoteData);
-        updatePositionTable(quoteData.positions || positionList, rates);
+        updatePositionTable(positionList, rates);
         updateCharts(quoteData, positionList, rates);
         return;
       }
     } catch (e) {
+      if (e?.status === 401) return;
       console.warn('[Dashboard] Summary API unavailable, using local calculation');
     }
-    
-    // 本地计算回退
+
+    // 仅当 /api/summary 不可用时，回退到本地计算
+    const [positions, rates] = await Promise.all([
+      get('/api/positions', { status: 'OPEN' }, { silent: true }).catch(() => []),
+      getExchangeRates().catch(() => ({ CNY: 1, USD: 0.1389, HKD: 1.0833, CHF: 0.1234 }))
+    ]);
+
+    const positionList = Array.isArray(positions) ? positions : [];
     const { calculatePortfolioSummary } = await import('../services/portfolio.js');
     const quotesMap = new Map();
     const summary = calculatePortfolioSummary(positionList, quotesMap, rates);
@@ -730,9 +731,9 @@ async function updateCharts(summary, positions, rates) {
       if (treemapData.length > 0) renderTreemap(treemapContainer, treemapData);
     }
     
-    // 饼图模式切换
+    // 饼图模式切换（使用 onclick 防止定时刷新时重复绑定监听器）
     document.querySelectorAll('[data-pie-mode]').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.onclick = async () => {
         document.querySelectorAll('[data-pie-mode]').forEach(b => b.classList.remove('chart-controls__btn--active'));
         btn.classList.add('chart-controls__btn--active');
         
@@ -752,7 +753,7 @@ async function updateCharts(summary, positions, rates) {
         }
         
         if (pieData.length > 0 && pieContainer) renderPortfolioPie(pieContainer, pieData);
-      });
+      };
     });
     
   } catch (error) {

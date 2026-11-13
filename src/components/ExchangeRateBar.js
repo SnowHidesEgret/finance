@@ -28,11 +28,18 @@ export async function renderExchangeRateBar(container) {
     </div>
   `;
   
-  // 初始加载
-  await updateRates();
+  // 初始加载（仅已登录时拉取，登录成功后自动触发）
+  if (localStorage.getItem('auth_token')) {
+    await updateRates();
+  }
+  window.addEventListener('stockvault:auth-success', () => updateRates(false));
   
   // 2 小时自动刷新
-  refreshTimer = setInterval(updateRates, 2 * 60 * 60 * 1000);
+  refreshTimer = setInterval(() => {
+    if (localStorage.getItem('auth_token')) {
+      updateRates();
+    }
+  }, 2 * 60 * 60 * 1000);
   
   // 手动刷新
   container.querySelector('#rate-refresh')?.addEventListener('click', async () => {
@@ -50,6 +57,7 @@ export async function renderExchangeRateBar(container) {
  * @param {boolean} [force=false]
  */
 async function updateRates(force = false) {
+  if (!localStorage.getItem('auth_token')) return;
   try {
     if (force) {
       await getExchangeRates(true);
@@ -57,7 +65,7 @@ async function updateRates(force = false) {
     
     const [rates, quotes] = await Promise.all([
       getFormattedRates(),
-      getQuotes(['DX-Y.NYB', '^TNX'], force).catch(() => new Map()) // 即使获取失败也不影响主体汇率显示
+      getQuotes(['DX-Y.NYB', '^TNX'], force, { silent: true }).catch(() => new Map()) // 即使获取失败也不影响主体汇率显示
     ]);
     
     const dxyQuote = quotes.get('DX-Y.NYB');
