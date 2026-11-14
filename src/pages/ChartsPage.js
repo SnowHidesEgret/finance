@@ -37,6 +37,157 @@ const CURRENCY_LABELS = {
   CHF: '🇨🇭 CHF 瑞郎'
 };
 
+/**
+ * 指标含义与计算方式字典（用于鼠标悬停提示）
+ */
+const METRIC_HELP = {
+  kpi_winrate: {
+    title: '整体投资胜率',
+    meaning: '衡量当前持仓与历史已平仓标的中，实现正收益的标的占比，反映选股与建仓的成功概率。',
+    formula: '胜率 = 盈利标的数量 / 总标的数量 × 100%（含当前 OPEN 持仓与历史 CLOSED 平仓）'
+  },
+  kpi_pf: {
+    title: '盈亏比 (Profit Factor)',
+    meaning: '衡量“赚大亏小”能力的核心风控指标。数值 > 1 表示总盈利覆盖总亏损，> 2 通常代表优秀的盈亏控制。',
+    formula: 'Profit Factor = ∑(盈利标的盈利额) / |∑(亏损标的亏损额)|；单笔均盈亏比 = 平均每笔盈利 / 平均每笔亏损'
+  },
+  kpi_mdd: {
+    title: '近一年最大回撤 (Max Drawdown)',
+    meaning: '统计周期内组合净值从历史最高点回落到后续最低点的最大幅度，衡量极端下行风险。',
+    formula: '最大回撤率 = max((阶段峰值市值 - 随后低谷市值) / 阶段峰值市值) × 100%'
+  },
+  kpi_cr3: {
+    title: '前三大重仓集中度 (CR3)',
+    meaning: '前三大持仓市值占组合总市值的比例（当历史快照不足 2 天时自动展示），反映头寸集中风险。',
+    formula: 'CR3 = (市值 Top 1 + Top 2 + Top 3) / 组合总市值 × 100%'
+  },
+  kpi_holding: {
+    title: '加权持仓周期 & 组合年化',
+    meaning: '按各持仓当前市值加权计算的平均持有天数，并将当前累计收益率年化，便于跨周期横向对比。',
+    formula: '加权天数 = ∑(个股持仓天数 × 个股市值) / 总市值；年化收益率 = (累计收益率 / 加权持仓天数) × 365'
+  },
+  trend_chart: {
+    title: '资产与收益净值走势',
+    meaning: '追踪不同市场与时间窗口下的资产规模与真实收益变化，剔除加减仓本金干扰来观察收益曲线。',
+    formula: '市值 vs 成本：每日快照市值与投入成本；累计盈亏 = 市值 - 成本；YTD 年内收益 = 年初至今净值盈亏'
+  },
+  trend_peak: {
+    title: '区间峰值',
+    meaning: '当前所选市场与时间跨度内，资产总市值达到的最高点及其对应日期。',
+    formula: '区间峰值 = max(所选时间区间内每日快照 totalValueCNY)'
+  },
+  trend_mdd: {
+    title: '区间最大回撤',
+    meaning: '当前所选市场与时间跨度内，从局部最高点到其后最低点的最大净值回撤幅度与金额。',
+    formula: '回撤金额 = 峰值市值 - 后续低谷市值；回撤率 = 回撤金额 / 峰值市值 × 100%'
+  },
+  trend_change: {
+    title: '区间盈亏变动',
+    meaning: '所选时间区间期末与期初累计盈亏的净增量，反映该时间段内的净赚钱效应。',
+    formula: '变动额 = 期末累计盈亏 - 期初累计盈亏；变动率 = 变动额 / 期初市值 × 100%'
+  },
+  market_compare: {
+    title: '各市场收益表现对比',
+    meaning: '横向对比美股、港股、A股、瑞士四个市场的赚钱效率与累计贡献，辅助跨市场资金再平衡。',
+    formula: 'YTD/MTD = 期间总盈亏 / (当前市值 - 期间总盈亏)；年化% = (市场累计收益率 / 市场加权持仓天数) × 365'
+  },
+  waterfall: {
+    title: '盈亏归因瀑布图 (Waterfall)',
+    meaning: '拆解当前组合总盈亏/YTD/MTD 到底由哪些核心个股拉动、哪些个股拖累，定位主要收益来源。',
+    formula: '净收益合计 = Top 正贡献个股 + 其他持仓汇总 + Top 负贡献个股（均折算人民币 CNY）'
+  },
+  quadrant: {
+    title: '持仓周期 × 收益率 四象限诊断',
+    meaning: '以“平均持仓天数”和“0% 盈亏线”划分四象限，快速识别长线稳赢、短线高效、建仓观察与长线被套标的。',
+    formula: 'X 轴 = 个股加权持仓天数；Y 轴 = 总收益率% / 年化% / YTD%；气泡面积 ∝ 当前持仓市值'
+  },
+  winrate_panel: {
+    title: '胜率分布与盈亏结构复盘',
+    meaning: '支持按“持仓标的”或“逐笔买入批次(Lots)”双粒度检验交易胜率，并对比在途浮盈与已平仓落袋盈亏。',
+    formula: '总盈利 = ∑盈利项；总亏损 = ∑亏损项；均盈/均亏 = 各自总额 / 对应笔数'
+  },
+  stat_winrate: {
+    title: '统计胜率',
+    meaning: '在当前所选统计粒度（按标的或按逐笔买入批次）下，盈利项目数占总项目数的比例。',
+    formula: '胜率 = 盈利数量 / (盈利数 + 亏损数 + 持平数) × 100%'
+  },
+  stat_avg_wl: {
+    title: '平均单笔盈利 / 亏损',
+    meaning: '对比平均每笔赚钱单的盈利额与亏钱单的亏损额，二者比值即“单笔均盈亏比”。',
+    formula: '平均盈利 = 总盈利额 / 盈利笔数；平均亏损 = |总亏损额| / 亏损笔数'
+  },
+  stat_unrealized: {
+    title: '在途浮动净盈亏',
+    meaning: '当前所有尚未平仓（OPEN）的持仓按实时市价与实时汇率计算的净账面盈亏。',
+    formula: '浮动净盈亏 = ∑(当前市值 CNY - 持仓成本 CNY)'
+  },
+  stat_realized: {
+    title: '历史已平仓落袋盈亏',
+    meaning: '所有已彻底清仓（CLOSED）的历史交易已经兑现的真实收益净值（已扣除买卖手续费）。',
+    formula: '已实现盈亏 = ∑((平仓价 × 数量 - 卖出佣金) - (开仓价 × 数量 + 买入佣金)) × 汇率'
+  },
+  stat_best: {
+    title: '最佳盈利贡献',
+    meaning: '在当前统计粒度（标的或批次）中，贡献人民币绝对盈利金额最高的单项。',
+    formula: 'Best = max(所有统计项的 pnlCNY)'
+  },
+  stat_worst: {
+    title: '最大亏损拖累',
+    meaning: '在当前统计粒度（标的或批次）中，造成人民币绝对亏损金额最大的单项。',
+    formula: 'Worst = min(所有统计项的 pnlCNY < 0)'
+  },
+  monthly_matrix: {
+    title: '月度收益日历矩阵',
+    meaning: '以基金月报视角按自然月回溯全年收益节奏，识别季节性波动与连续回撤月份。',
+    formula: '历史月 = (月末快照累计盈亏 - 上月末累计盈亏) / 月初市值；当月实时 = 当月 MTD 收益 / (当前市值 - MTD 收益)'
+  },
+  monthly_cell_live: {
+    title: '本月实时 MTD 收益',
+    meaning: '从本月 1 日至今日的自然月实时收益率与盈亏额，包含在途持仓当月波动及本月已平仓损益。',
+    formula: 'MTD% = 本月净盈亏 / (当前总市值 - 本月净盈亏) × 100%（上月前建仓以上月末收盘价为基准）'
+  },
+  monthly_cell_hist: {
+    title: '历史自然月收益',
+    meaning: '基于该月每日资产快照推算的自然月盈亏变动与收益率（受快照记录天数影响）。',
+    formula: '月度盈亏 ≈ 月末快照累计盈亏 - 上月末累计盈亏；月收益率 = 月度盈亏 / 月初快照市值 × 100%'
+  },
+  monthly_ytd_bar: {
+    title: '年度累计表现 (YTD)',
+    meaning: '今年 1 月 1 日至今的全局投资收益（含今年内已清仓标的实现的盈亏）。',
+    formula: 'YTD% = 年内净盈亏 / (当前总市值 - 年内净盈亏) × 100%（去年建仓以去年末收盘价为基准）'
+  },
+  monthly_trades: {
+    title: '月度资金净流向与交易活跃度',
+    meaning: '统计每月买入与卖出成交金额（折算 CNY），复盘加仓/减仓节奏是否踩准市场高低点。',
+    formula: '买入/卖出额 = ∑(成交价 × 数量 × 汇率)；净流入 = 月度买入总额 - 月度卖出总额'
+  },
+  currency_exposure: {
+    title: '多币种成本投入 vs 当前市值敞口',
+    meaning: '按 USD / HKD / CNY / CHF 币种分组对比原始投入成本与当前人民币市值，评估汇率与单一货币敞口风险。',
+    formula: '币种收益率% = (该币种当前市值 CNY - 该币种投入成本 CNY) / 该币种投入成本 CNY × 100%'
+  },
+  concentration_pareto: {
+    title: '持仓集中度帕累托曲线 (Pareto)',
+    meaning: '遵循二八法则展示头部重仓股对总仓位的累计占比，评估组合分散度与单票黑天鹅风险。',
+    formula: '累计占比 = 前 N 大持仓市值之和 / 组合总市值 × 100%（80% 线为高集中度参考线）'
+  },
+  badge_cr3: {
+    title: 'CR3 前三大重仓集中度',
+    meaning: '市值占比最高的前 3 只股票合计占总资产的百分比。通常 >60% 属于集中持股风格。',
+    formula: 'CR3 = (Top 1 市值 + Top 2 市值 + Top 3 市值) / 组合总市值 × 100%'
+  },
+  badge_cr5: {
+    title: 'CR5 前五大重仓集中度',
+    meaning: '市值占比最高的前 5 只股票合计占总资产的百分比，衡量核心持仓统治力。',
+    formula: 'CR5 = ∑(Top 1 ~ Top 5 持仓市值) / 组合总市值 × 100%'
+  },
+  badge_hhi: {
+    title: '赫芬达尔-赫希曼指数 (HHI)',
+    meaning: '经济学经典集中度指标（0~10000）。<1500 为均衡分散，1500~2500 为适度集中，>2500 为高度集中。',
+    formula: 'HHI = ∑((单票市值 / 总市值)² ) × 10000（全仓单票时 HHI = 10000）'
+  }
+};
+
 // Page state
 let state = {
   trendDays: 90,
@@ -83,34 +234,34 @@ export async function renderChartsPage(container) {
 
       <!-- 顶部核心复盘 KPI 卡片 -->
       <section class="dashboard__kpi-row animate-fade-in-up delay-1">
-        <div class="kpi-card">
+        <div class="kpi-card" data-help-key="kpi_winrate">
           <div class="kpi-card__icon"><i data-lucide="award"></i></div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">整体投资胜率</div>
+            <div class="kpi-card__label">整体投资胜率 <span class="sv-help-icon">?</span></div>
             <div class="kpi-card__value" id="analytics-kpi-winrate">--</div>
             <div class="kpi-card__sub" id="analytics-kpi-winrate-sub">加载统计中...</div>
           </div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" data-help-key="kpi_pf">
           <div class="kpi-card__icon"><i data-lucide="scale"></i></div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">盈亏比 (Profit Factor)</div>
+            <div class="kpi-card__label">盈亏比 (Profit Factor) <span class="sv-help-icon">?</span></div>
             <div class="kpi-card__value" id="analytics-kpi-pf">--</div>
             <div class="kpi-card__sub" id="analytics-kpi-pf-sub">总盈利 / 总亏损</div>
           </div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" id="analytics-kpi-dd-card" data-help-key="kpi_mdd">
           <div class="kpi-card__icon"><i data-lucide="shield-alert"></i></div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label" id="analytics-kpi-dd-label">区间最大回撤</div>
+            <div class="kpi-card__label"><span id="analytics-kpi-dd-label">区间最大回撤</span> <span class="sv-help-icon">?</span></div>
             <div class="kpi-card__value" id="analytics-kpi-dd">--</div>
             <div class="kpi-card__sub" id="analytics-kpi-dd-sub">基于净值快照序列</div>
           </div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card" data-help-key="kpi_holding">
           <div class="kpi-card__icon"><i data-lucide="clock"></i></div>
           <div class="kpi-card__content">
-            <div class="kpi-card__label">加权持仓周期 / 年化</div>
+            <div class="kpi-card__label">加权持仓周期 / 年化 <span class="sv-help-icon">?</span></div>
             <div class="kpi-card__value" id="analytics-kpi-days">--</div>
             <div class="kpi-card__sub" id="analytics-kpi-annualized">组合年化 --</div>
           </div>
@@ -122,9 +273,10 @@ export async function renderChartsPage(container) {
         <div class="chart-container" style="width:100%;">
           <div class="chart-container__header">
             <div class="chart-container__title-group">
-              <h3 class="chart-container__title">
+              <h3 class="chart-container__title" data-help-key="trend_chart">
                 <i data-lucide="trending-up"></i>
                 资产与收益净值走势
+                <span class="sv-help-icon">?</span>
               </h3>
               <div class="chart-controls" id="trend-mode-controls">
                 <button class="chart-controls__btn chart-controls__btn--active" data-trend-mode="value">市值 vs 成本</button>
@@ -153,16 +305,16 @@ export async function renderChartsPage(container) {
               <span class="chart-trend-summary__label">当前范围：</span>
               <span class="chart-trend-summary__val" id="trend-stat-range">全部市场 · 近90天</span>
             </span>
-            <span class="chart-trend-summary__item">
-              <span class="chart-trend-summary__label">区间峰值：</span>
+            <span class="chart-trend-summary__item" data-help-key="trend_peak">
+              <span class="chart-trend-summary__label">区间峰值 <span class="sv-help-icon">?</span>：</span>
               <span class="chart-trend-summary__val" id="trend-stat-peak">--</span>
             </span>
-            <span class="chart-trend-summary__item">
-              <span class="chart-trend-summary__label">最大回撤：</span>
+            <span class="chart-trend-summary__item" data-help-key="trend_mdd">
+              <span class="chart-trend-summary__label">最大回撤 <span class="sv-help-icon">?</span>：</span>
               <span class="chart-trend-summary__val" id="trend-stat-mdd">--</span>
             </span>
-            <span class="chart-trend-summary__item">
-              <span class="chart-trend-summary__label">区间盈亏变动：</span>
+            <span class="chart-trend-summary__item" data-help-key="trend_change">
+              <span class="chart-trend-summary__label">区间盈亏变动 <span class="sv-help-icon">?</span>：</span>
               <span class="chart-trend-summary__val" id="trend-stat-change">--</span>
             </span>
           </div>
@@ -175,9 +327,10 @@ export async function renderChartsPage(container) {
         <div class="dashboard__charts-row">
           <div class="chart-container">
             <div class="chart-container__header">
-              <h3 class="chart-container__title">
+              <h3 class="chart-container__title" data-help-key="market_compare">
                 <i data-lucide="globe-2"></i>
                 各市场收益表现对比
+                <span class="sv-help-icon">?</span>
               </h3>
               <div class="chart-controls" id="market-compare-controls">
                 <button class="chart-controls__btn chart-controls__btn--active" data-mkt-metric="ytd">YTD 年内</button>
@@ -192,9 +345,10 @@ export async function renderChartsPage(container) {
           <div class="chart-container">
             <div class="chart-container__header">
               <div class="chart-container__title-group">
-                <h3 class="chart-container__title">
+                <h3 class="chart-container__title" data-help-key="waterfall">
                   <i data-lucide="git-pull-request"></i>
                   盈亏归因瀑布图 (Waterfall)
+                  <span class="sv-help-icon">?</span>
                 </h3>
               </div>
               <div class="chart-controls" id="waterfall-controls">
@@ -214,9 +368,10 @@ export async function renderChartsPage(container) {
           <div class="chart-container">
             <div class="chart-container__header">
               <div class="chart-container__title-group">
-                <h3 class="chart-container__title">
+                <h3 class="chart-container__title" data-help-key="quadrant">
                   <i data-lucide="compass"></i>
                   持仓周期 × 收益率 四象限诊断
+                  <span class="sv-help-icon">?</span>
                 </h3>
                 <span class="chart-container__hint">气泡大小=市值 · 点击气泡看逐笔明细</span>
               </div>
@@ -231,9 +386,10 @@ export async function renderChartsPage(container) {
 
           <div class="chart-container">
             <div class="chart-container__header">
-              <h3 class="chart-container__title">
+              <h3 class="chart-container__title" data-help-key="winrate_panel">
                 <i data-lucide="pie-chart"></i>
                 胜率分布与盈亏结构复盘
+                <span class="sv-help-icon">?</span>
               </h3>
               <div class="chart-controls" id="winrate-controls">
                 <button class="chart-controls__btn chart-controls__btn--active" data-winrate-unit="position">按持仓标的</button>
@@ -259,9 +415,10 @@ export async function renderChartsPage(container) {
           <div class="chart-container">
             <div class="chart-container__header">
               <div class="chart-container__title-group">
-                <h3 class="chart-container__title">
+                <h3 class="chart-container__title" data-help-key="monthly_matrix">
                   <i data-lucide="calendar-days"></i>
                   月度收益日历矩阵 (${new Date().getFullYear()}年)
+                  <span class="sv-help-icon">?</span>
                 </h3>
                 <span class="chart-container__hint" id="monthly-matrix-hint">融合快照历史与当月实时 MTD</span>
               </div>
@@ -272,9 +429,10 @@ export async function renderChartsPage(container) {
           <div class="chart-container">
             <div class="chart-container__header">
               <div class="chart-container__title-group">
-                <h3 class="chart-container__title">
+                <h3 class="chart-container__title" data-help-key="monthly_trades">
                   <i data-lucide="arrow-left-right"></i>
                   月度资金净流向与交易活跃度
+                  <span class="sv-help-icon">?</span>
                 </h3>
                 <span class="chart-container__hint">买入 vs 卖出 (CNY) 及净流入曲线</span>
               </div>
@@ -290,9 +448,10 @@ export async function renderChartsPage(container) {
           <div class="chart-container">
             <div class="chart-container__header">
               <div class="chart-container__title-group">
-                <h3 class="chart-container__title">
+                <h3 class="chart-container__title" data-help-key="currency_exposure">
                   <i data-lucide="coins"></i>
                   多币种成本投入 vs 当前市值敞口
+                  <span class="sv-help-icon">?</span>
                 </h3>
                 <span class="chart-container__hint">折算人民币 (CNY) 对比</span>
               </div>
@@ -303,14 +462,15 @@ export async function renderChartsPage(container) {
           <div class="chart-container">
             <div class="chart-container__header">
               <div class="chart-container__title-group">
-                <h3 class="chart-container__title">
+                <h3 class="chart-container__title" data-help-key="concentration_pareto">
                   <i data-lucide="layers"></i>
                   持仓集中度帕累托曲线 (Pareto)
+                  <span class="sv-help-icon">?</span>
                 </h3>
               </div>
               <div class="concentration-badges" id="concentration-badges">
-                <span class="concentration-badge">CR3: --</span>
-                <span class="concentration-badge">CR5: --</span>
+                <span class="concentration-badge" data-help-key="badge_cr3">CR3: --</span>
+                <span class="concentration-badge" data-help-key="badge_cr5">CR5: --</span>
               </div>
             </div>
             <div class="chart-container__body" id="chart-concentration-pareto" style="height:320px"></div>
@@ -321,6 +481,7 @@ export async function renderChartsPage(container) {
   `;
 
   initTheme();
+  const cleanupTooltips = setupMetricTooltips(container);
   bindControls(container);
   await loadAllAnalyticsData();
 
@@ -334,6 +495,7 @@ export async function renderChartsPage(container) {
   const observer = new MutationObserver(() => {
     if (!document.getElementById('chart-asset-trend')) {
       window.removeEventListener('stockvault:refresh', refreshHandler);
+      cleanupTooltips();
       observer.disconnect();
     }
   });
@@ -609,12 +771,14 @@ function updateTopKpiCards() {
 
   // 3. Max Drawdown (or Concentration if <2 snapshots)
   const allSnapshots = state.snapshotsCache.get('ALL') || [];
+  const ddCardEl = document.getElementById('analytics-kpi-dd-card');
   const ddLabelEl = document.getElementById('analytics-kpi-dd-label');
   const ddEl = document.getElementById('analytics-kpi-dd');
   const ddSubEl = document.getElementById('analytics-kpi-dd-sub');
 
   if (allSnapshots.length >= 2) {
     const metrics = computeTrendMetrics(allSnapshots);
+    if (ddCardEl) ddCardEl.setAttribute('data-help-key', 'kpi_mdd');
     if (ddLabelEl) ddLabelEl.textContent = '近一年最大回撤';
     if (ddEl) {
       ddEl.textContent = metrics.maxDrawdownPct > 0 ? `-${metrics.maxDrawdownPct.toFixed(2)}%` : '0.00%';
@@ -630,6 +794,7 @@ function updateTopKpiCards() {
     const openPositions = (summary.positions || []).filter(p => p.status === 'OPEN' || !p.status);
     const sortedWeights = [...openPositions].sort((a, b) => (b.weight || 0) - (a.weight || 0));
     const cr3 = sortedWeights.slice(0, 3).reduce((s, p) => s + (p.weight || 0), 0);
+    if (ddCardEl) ddCardEl.setAttribute('data-help-key', 'kpi_cr3');
     if (ddLabelEl) ddLabelEl.textContent = '前三大重仓集中度 (CR3)';
     if (ddEl) {
       ddEl.textContent = `${cr3.toFixed(1)}%`;
@@ -1108,13 +1273,13 @@ function renderWinrateAndStructure() {
   const netUnrealized = stats.unrealizedProfitCNY - stats.unrealizedLossCNY;
 
   statsPanel.innerHTML = `
-    <div class="chart-stat-row">
+    <div class="chart-stat-row" data-help-key="stat_winrate">
       <span class="chart-stat-row__label">统计胜率 (${state.winrateUnit === 'lot' ? '按批次' : '按标的'})</span>
       <span class="chart-stat-row__value kpi-card__sub--${stats.winRate >= 50 ? 'profit' : 'loss'}">
         ${stats.winRate.toFixed(1)}% (${stats.winners.length}胜 / ${stats.losers.length}负)
       </span>
     </div>
-    <div class="chart-stat-row">
+    <div class="chart-stat-row" data-help-key="stat_avg_wl">
       <span class="chart-stat-row__label">平均单笔盈利 / 亏损</span>
       <span class="chart-stat-row__value">
         <span class="kpi-card__sub--profit">${formatCurrency(stats.avgWin, 'CNY', false, 'wan')}</span>
@@ -1122,25 +1287,25 @@ function renderWinrateAndStructure() {
         <span class="kpi-card__sub--loss">${formatCurrency(stats.avgLoss, 'CNY', false, 'wan')}</span>
       </span>
     </div>
-    <div class="chart-stat-row">
+    <div class="chart-stat-row" data-help-key="stat_unrealized">
       <span class="chart-stat-row__label">在途浮动净盈亏</span>
       <span class="chart-stat-row__value kpi-card__sub--${getPnLClass(netUnrealized)}">
         ${formatCurrency(netUnrealized, 'CNY', true)}
       </span>
     </div>
-    <div class="chart-stat-row">
+    <div class="chart-stat-row" data-help-key="stat_realized">
       <span class="chart-stat-row__label">历史已平仓落袋盈亏</span>
       <span class="chart-stat-row__value kpi-card__sub--${getPnLClass(netRealized)}">
         ${formatCurrency(netRealized, 'CNY', true)} (${state.closedPositions.length}笔平仓)
       </span>
     </div>
-    <div class="chart-stat-row">
+    <div class="chart-stat-row" data-help-key="stat_best">
       <span class="chart-stat-row__label">最佳盈利贡献</span>
-      <span class="chart-stat-row__value kpi-card__sub--profit" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${bestStr}">${bestStr}</span>
+      <span class="chart-stat-row__value kpi-card__sub--profit" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${bestStr}</span>
     </div>
-    <div class="chart-stat-row">
+    <div class="chart-stat-row" data-help-key="stat_worst">
       <span class="chart-stat-row__label">最大亏损拖累</span>
-      <span class="chart-stat-row__value kpi-card__sub--loss" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${worstStr}">${worstStr}</span>
+      <span class="chart-stat-row__value kpi-card__sub--loss" style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${worstStr}</span>
     </div>
   `;
 
@@ -1265,8 +1430,9 @@ function renderMonthlyMatrix() {
       }
     }
 
+    const cellHelpKey = isCurrentMonth ? 'monthly_cell_live' : (hasData ? 'monthly_cell_hist' : '');
     cellsHtml.push(`
-      <div class="monthly-cell ${isCurrentMonth ? 'monthly-cell--current' : ''}" style="${bgStyle}">
+      <div class="monthly-cell ${isCurrentMonth ? 'monthly-cell--current' : ''}" style="${bgStyle}" ${cellHelpKey ? `data-help-key="${cellHelpKey}"` : ''}>
         <div class="monthly-cell__header">
           <span>${m}月</span>
           ${isCurrentMonth ? '<span class="monthly-cell__badge">本月实时</span>' : ''}
@@ -1293,8 +1459,8 @@ function renderMonthlyMatrix() {
     <div class="monthly-matrix">
       ${cellsHtml.join('')}
     </div>
-    <div style="margin-top:12px;padding:10px 14px;border-radius:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:0.82rem;">
-      <span style="color:var(--color-text-secondary);font-weight:500;">📅 ${curYear} 年度累计表现 (YTD)</span>
+    <div data-help-key="monthly_ytd_bar" style="margin-top:12px;padding:10px 14px;border-radius:10px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:0.82rem;">
+      <span style="color:var(--color-text-secondary);font-weight:500;">📅 ${curYear} 年度累计表现 (YTD) <span class="sv-help-icon">?</span></span>
       <span style="font-family:'JetBrains Mono',monospace;font-weight:700;" class="kpi-card__sub--${ytdClass}">
         ${formatCurrency(ytdPnl, 'CNY', true)} (${formatPercent(ytdPct)})
       </span>
@@ -1544,9 +1710,9 @@ function renderConcentrationParetoChart() {
 
   if (badgesContainer) {
     badgesContainer.innerHTML = `
-      <span class="concentration-badge" title="前三大重仓股合计占比">CR3: <b>${cr3.toFixed(1)}%</b></span>
-      <span class="concentration-badge" title="前五大重仓股合计占比">CR5: <b>${cr5.toFixed(1)}%</b></span>
-      <span class="concentration-badge" title="赫芬达尔指数 (HHI): ${(hhi * 10000).toFixed(0)}">${riskLabel}</span>
+      <span class="concentration-badge" data-help-key="badge_cr3">CR3: <b>${cr3.toFixed(1)}%</b></span>
+      <span class="concentration-badge" data-help-key="badge_cr5">CR5: <b>${cr5.toFixed(1)}%</b></span>
+      <span class="concentration-badge" data-help-key="badge_hhi">${riskLabel} (HHI ${(hhi * 10000).toFixed(0)})</span>
     `;
   }
 
@@ -1635,6 +1801,86 @@ function renderConcentrationParetoChart() {
 
   chart.setOption(option);
   setupResize(chart);
+}
+
+/**
+ * Setup floating hover tooltip for metric meaning & calculation formula
+ */
+function setupMetricTooltips(container) {
+  document.getElementById('sv-metric-tooltip')?.remove();
+  const tooltip = document.createElement('div');
+  tooltip.id = 'sv-metric-tooltip';
+  tooltip.className = 'sv-help-tooltip';
+  document.body.appendChild(tooltip);
+
+  let activeTarget = null;
+
+  const positionTooltip = (e) => {
+    const pad = 14;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const rect = tooltip.getBoundingClientRect();
+    let left = e.clientX + pad;
+    let top = e.clientY + pad;
+
+    if (left + rect.width > vw - 10) {
+      left = Math.max(10, e.clientX - rect.width - pad);
+    }
+    if (top + rect.height > vh - 10) {
+      top = Math.max(10, e.clientY - rect.height - pad);
+    }
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+
+  const onMouseOver = (e) => {
+    const el = e.target.closest('[data-help-key]');
+    if (!el) return;
+    const key = el.getAttribute('data-help-key');
+    const info = METRIC_HELP[key];
+    if (!info) return;
+
+    activeTarget = el;
+    tooltip.innerHTML = `
+      <div class="sv-help-tooltip__title">${info.title}</div>
+      <div class="sv-help-tooltip__row">
+        <span class="sv-help-tooltip__tag">含义</span>${info.meaning}
+      </div>
+      <div class="sv-help-tooltip__row">
+        <span class="sv-help-tooltip__tag sv-help-tooltip__tag--formula">计算方式</span>
+        <span class="sv-help-tooltip__formula">${info.formula}</span>
+      </div>
+    `;
+    tooltip.classList.add('sv-help-tooltip--visible');
+    positionTooltip(e);
+  };
+
+  const onMouseMove = (e) => {
+    if (!activeTarget) return;
+    positionTooltip(e);
+  };
+
+  const onMouseOut = (e) => {
+    if (!activeTarget) return;
+    const related = e.relatedTarget;
+    if (related && activeTarget.contains(related)) return;
+    const nextTarget = related?.closest?.('[data-help-key]');
+    if (nextTarget === activeTarget) return;
+
+    activeTarget = null;
+    tooltip.classList.remove('sv-help-tooltip--visible');
+  };
+
+  container.addEventListener('mouseover', onMouseOver);
+  container.addEventListener('mousemove', onMouseMove);
+  container.addEventListener('mouseout', onMouseOut);
+
+  return () => {
+    container.removeEventListener('mouseover', onMouseOver);
+    container.removeEventListener('mousemove', onMouseMove);
+    container.removeEventListener('mouseout', onMouseOut);
+    tooltip.remove();
+  };
 }
 
 /**

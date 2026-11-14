@@ -253,3 +253,130 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* Interactive Metric Help Trigger & Floating Tooltip */
+[data-help-key] {
+  cursor: help;
+}
+
+.sv-help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-text-muted, #64748b);
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  margin-left: 4px;
+  vertical-align: middle;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+[data-help-key]:hover .sv-help-icon,
+.sv-help-icon:hover {
+  color: #fff;
+  background: var(--color-accent, #6366f1);
+  border-color: var(--color-accent, #6366f1);
+}
+
+.sv-help-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 340px;
+  min-width: 220px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: #f1f5f9;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.sv-help-tooltip--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.sv-help-tooltip__title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #a5b4fc;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sv-help-tooltip__row {
+  margin-bottom: 5px;
+}
+
+.sv-help-tooltip__row:last-child {
+  margin-bottom: 0;
+}
+
+.sv-help-tooltip__tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+}
+
+.sv-help-tooltip__tag--formula {
+  background: rgba(16, 185, 129, 0.18);
+  color: #6ee7b7;
+}
+
+.sv-help-tooltip__formula {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.73rem;
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.1);
+  padding: 4px 7px;
+  border-radius: 5px;
+  margin-top: 3px;
+  display: block;
+  word-break: break-word;
+}
+
+[data-theme='light'] .sv-help-tooltip {
+  background: rgba(255, 255, 255, 0.97);
+  color: #0f172a;
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15);
+}
+
+[data-theme='light'] .sv-help-tooltip__title {
+  color: #4f46e5;
+}
+
+[data-theme='light'] .sv-help-tooltip__tag {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4338ca;
+}
+
+[data-theme='light'] .sv-help-tooltip__tag--formula {
+  background: rgba(16, 185, 129, 0.14);
+  color: #047857;
+}
+
+[data-theme='light'] .sv-help-tooltip__formula {
+  color: #1e293b;
+  background: rgba(15, 23, 42, 0.05);
+}
